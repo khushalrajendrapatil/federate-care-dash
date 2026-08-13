@@ -7,6 +7,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { PageHeader } from "@/components/AppShell";
 import { StatCard } from "@/components/StatCard";
 import { AccuracyChart } from "@/components/AccuracyChart";
+import { PipelineFlow } from "@/components/PipelineFlow";
 import { ApiErrorNotice } from "@/components/ApiErrorNotice";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -140,6 +141,8 @@ function DashboardPage() {
             : "Your hospital's data, participation and prediction activity."
         }
       />
+
+      <PipelineFlow status={status.data} patientCount={data.patientCount} />
 
       <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {isAdmin ? (
