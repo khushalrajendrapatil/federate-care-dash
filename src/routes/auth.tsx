@@ -33,6 +33,7 @@ function AuthPage() {
   const navigate = useNavigate();
   const { session, loading } = useAuth();
   const [busy, setBusy] = useState(false);
+  const [email, setEmail] = useState("");
 
   useEffect(() => {
     if (!loading && session) void navigate({ to: "/dashboard" });
@@ -53,6 +54,24 @@ function AuthPage() {
     }
     void navigate({ to: "/dashboard" });
   };
+
+  const forgotPassword = async () => {
+    if (!email.trim()) {
+      toast.error("Enter your account email first.");
+      return;
+    }
+    setBusy(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+    setBusy(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success("Reset link sent — check your inbox.");
+  };
+
 
   const register = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -120,7 +139,15 @@ function AuthPage() {
                 <form onSubmit={signIn} className="space-y-4 pt-4">
                   <div className="space-y-2">
                     <Label htmlFor="si-email">Email</Label>
-                    <Input id="si-email" name="email" type="email" required autoComplete="email" />
+                    <Input
+                      id="si-email"
+                      name="email"
+                      type="email"
+                      required
+                      autoComplete="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="si-pass">Password</Label>
@@ -135,7 +162,16 @@ function AuthPage() {
                   <Button type="submit" className="w-full" disabled={busy}>
                     {busy ? <Loader2 className="size-4 animate-spin" /> : "Sign in"}
                   </Button>
+                  <button
+                    type="button"
+                    onClick={forgotPassword}
+                    disabled={busy}
+                    className="w-full text-center text-xs text-muted-foreground underline-offset-4 hover:underline"
+                  >
+                    Forgot password?
+                  </button>
                 </form>
+
               </TabsContent>
 
               <TabsContent value="register">
