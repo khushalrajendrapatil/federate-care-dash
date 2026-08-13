@@ -221,6 +221,7 @@ function DatasetsPage() {
                         >
                           <Trash2 className="size-4" />
                         </Button>
+                        )}
                       </TableCell>
                     ) : null}
                   </TableRow>
