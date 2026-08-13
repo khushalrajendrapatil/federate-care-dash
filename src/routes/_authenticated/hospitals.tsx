@@ -2,7 +2,9 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, X } from "lucide-react";
 import { toast } from "sonner";
+import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
+import { setHospitalStatus } from "@/lib/fl.functions";
 import { useAuth } from "@/hooks/useAuth";
 import { PageHeader } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
@@ -47,6 +49,7 @@ function statusClass(status: Status) {
 function HospitalsPage() {
   const { role } = useAuth();
   const qc = useQueryClient();
+  const statusFn = useServerFn(setHospitalStatus);
 
   const { data, isLoading } = useQuery({
     queryKey: ["hospitals"],
@@ -62,14 +65,14 @@ function HospitalsPage() {
   });
 
   const setStatus = useMutation({
-    mutationFn: async ({ id, status }: { id: string; status: Status }) => {
-      const { error } = await supabase.from("hospitals").update({ status }).eq("id", id);
-      if (error) throw error;
+    mutationFn: async ({ id, status }: { id: string; status: Exclude<Status, "pending"> }) => {
+      await statusFn({ data: { hospitalId: id, status } });
     },
     onSuccess: (_v, vars) => {
       toast.success(`Hospital ${vars.status}.`);
       void qc.invalidateQueries({ queryKey: ["hospitals"] });
       void qc.invalidateQueries({ queryKey: ["dashboard"] });
+      void qc.invalidateQueries({ queryKey: ["ledger"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });

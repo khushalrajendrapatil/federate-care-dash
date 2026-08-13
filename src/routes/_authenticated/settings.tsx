@@ -1,14 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
-import { CheckCircle2, Loader2, XCircle } from "lucide-react";
-import { toast } from "sonner";
+import { useQuery } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
+import { CheckCircle2, XCircle } from "lucide-react";
 import { PageHeader } from "@/components/AppShell";
-import { Button } from "@/components/ui/button";
+import { ApiErrorNotice } from "@/components/ApiErrorNotice";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/hooks/useAuth";
-import { apiFetch, getApiBaseUrl, setApiBaseUrl } from "@/lib/api";
+import { getSystemStatus } from "@/lib/fl.functions";
 
 export const Route = createFileRoute("/_authenticated/settings")({
   head: () => ({
@@ -16,119 +15,175 @@ export const Route = createFileRoute("/_authenticated/settings")({
       { title: "Settings — MedFed" },
       {
         name: "description",
-        content: "Configure the federated learning service URL and review your account details.",
+        content: "System status for the database, global model, federated learning and ledger.",
       },
       { property: "og:title", content: "Settings — MedFed" },
       {
         property: "og:description",
-        content: "Connection settings for the MedFed federated learning prediction service.",
+        content: "Service, model and privacy status for the MedFed federated learning platform.",
       },
     ],
   }),
   component: SettingsPage,
 });
 
+function StatusRow({ label, value, ok }: { label: string; value: string; ok?: boolean }) {
+  return (
+    <div className="flex items-center justify-between gap-4 border-b border-border py-2 last:border-0">
+      <p className="text-sm text-muted-foreground">{label}</p>
+      <p className="flex items-center gap-1.5 text-sm font-medium">
+        {ok === undefined ? null : ok ? (
+          <CheckCircle2 className="size-4 text-risk-low" />
+        ) : (
+          <XCircle className="size-4 text-risk-high" />
+        )}
+        {value}
+      </p>
+    </div>
+  );
+}
+
 function SettingsPage() {
   const { role, hospital, user } = useAuth();
-  const [url, setUrl] = useState("");
-  const [checking, setChecking] = useState(false);
-  const [status, setStatus] = useState<"idle" | "ok" | "fail">("idle");
-
-  useEffect(() => setUrl(getApiBaseUrl()), []);
-
-  const save = () => {
-    setApiBaseUrl(url);
-    setStatus("idle");
-    toast.success("Service URL saved for this browser.");
-  };
-
-  const test = async () => {
-    setChecking(true);
-    setStatus("idle");
-    setApiBaseUrl(url);
-    try {
-      await apiFetch<unknown>("/api/feature-names", { timeoutMs: 15_000 });
-      setStatus("ok");
-    } catch (err) {
-      setStatus("fail");
-      toast.error(err instanceof Error ? err.message : "Connection failed.");
-    } finally {
-      setChecking(false);
-    }
-  };
+  const statusFn = useServerFn(getSystemStatus);
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["system-status"],
+    queryFn: () => statusFn(),
+    retry: false,
+  });
 
   return (
     <>
-      <PageHeader title="Settings" description="Connection and account details." />
+      <PageHeader
+        title="Settings & system status"
+        description="Everything runs inside this application — there is no external service to configure."
+      />
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Card className="shadow-[var(--shadow-card)]">
-          <CardHeader>
-            <CardTitle className="text-base">Federated learning service</CardTitle>
-            <CardDescription>
-              Base URL of the Python API that performs training, predictions, SHAP explanations and
-              the ledger. Defaults to the VITE_FL_API_URL environment variable; the value below
-              overrides it in this browser.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="api-url">API base URL</Label>
-              <Input
-                id="api-url"
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                placeholder="https://your-service.onrender.com"
+      {isLoading ? (
+        <div className="grid gap-6 lg:grid-cols-2">
+          <Skeleton className="h-64" />
+          <Skeleton className="h-64" />
+        </div>
+      ) : error ? (
+        <ApiErrorNotice error={error} title="Could not load system status" />
+      ) : (
+        <div className="grid gap-6 lg:grid-cols-2">
+          <Card className="shadow-[var(--shadow-card)]">
+            <CardHeader>
+              <CardTitle className="text-base">Services</CardTitle>
+              <CardDescription>
+                The AI, federated learning and ledger services run as server functions in this
+                project.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <StatusRow
+                label="Database"
+                value={data!.database.message}
+                ok={data!.database.ok}
               />
-            </div>
-            <div className="flex items-center gap-3">
-              <Button onClick={save}>Save</Button>
-              <Button variant="outline" onClick={() => void test()} disabled={checking}>
-                {checking ? <Loader2 className="size-4 animate-spin" /> : null} Test connection
-              </Button>
-              {status === "ok" ? (
-                <span className="flex items-center gap-1.5 text-sm text-risk-low">
-                  <CheckCircle2 className="size-4" /> Reachable
-                </span>
-              ) : status === "fail" ? (
-                <span className="flex items-center gap-1.5 text-sm text-risk-high">
-                  <XCircle className="size-4" /> Unreachable
-                </span>
-              ) : null}
-            </div>
-          </CardContent>
-        </Card>
+              <StatusRow label="AI prediction service" value="In-app server function" ok />
+              <StatusRow
+                label="Global model"
+                value={data!.model.trained ? `Trained (${data!.model.version})` : "Not trained"}
+                ok={data!.model.trained}
+              />
+              <StatusRow
+                label="Model accuracy"
+                value={data!.model.accuracy != null ? `${data!.model.accuracy.toFixed(2)}%` : "—"}
+              />
+              <StatusRow label="Feature count" value={String(data!.model.featureCount)} />
+              <StatusRow
+                label="Last successful training"
+                value={
+                  data!.model.trainedAt ? new Date(data!.model.trainedAt).toLocaleString() : "Never"
+                }
+              />
+              <StatusRow label="Rounds completed" value={String(data!.model.roundsCompleted)} />
+              <StatusRow
+                label="Audit ledger"
+                value={
+                  data!.ledger.valid
+                    ? `Valid · ${data!.ledger.total} records`
+                    : `Broken at #${data!.ledger.firstBrokenSeq ?? "?"}`
+                }
+                ok={data!.ledger.valid}
+              />
+            </CardContent>
+          </Card>
 
-        <Card className="shadow-[var(--shadow-card)]">
-          <CardHeader>
-            <CardTitle className="text-base">Account</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3 text-sm">
-            <div>
-              <p className="text-xs text-muted-foreground">Email</p>
-              <p>{user?.email}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Role</p>
-              <p className="capitalize">{role ?? "—"}</p>
-            </div>
-            {hospital ? (
-              <>
+          <div className="space-y-6">
+            <Card className="shadow-[var(--shadow-card)]">
+              <CardHeader>
+                <CardTitle className="text-base">Federated learning</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <StatusRow
+                  label="Hospitals registered"
+                  value={String(data!.federated.hospitalsTotal)}
+                />
+                <StatusRow
+                  label="Approved hospitals"
+                  value={String(data!.federated.hospitalsApproved)}
+                />
+                <StatusRow
+                  label="Hospitals with data"
+                  value={String(data!.federated.hospitalsWithData)}
+                />
+                <StatusRow
+                  label="Training samples"
+                  value={String(data!.federated.totalTrainingSamples)}
+                />
+                <StatusRow
+                  label="Differential privacy"
+                  value={`noise ×${data!.privacy.noiseMultiplier}, clip ${data!.privacy.clipNorm}`}
+                  ok={data!.privacy.differentialPrivacy}
+                />
+                <StatusRow
+                  label="Secure aggregation"
+                  value={data!.privacy.secureAggregation ? "Enabled" : "Disabled"}
+                  ok={data!.privacy.secureAggregation}
+                />
+                <StatusRow
+                  label="Row-level security"
+                  value={data!.privacy.rowLevelSecurity ? "Enforced" : "Off"}
+                  ok={data!.privacy.rowLevelSecurity}
+                />
+              </CardContent>
+            </Card>
+
+            <Card className="shadow-[var(--shadow-card)]">
+              <CardHeader>
+                <CardTitle className="text-base">Account</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm">
                 <div>
-                  <p className="text-xs text-muted-foreground">Hospital</p>
-                  <p>
-                    {hospital.name} — {hospital.location}
-                  </p>
+                  <p className="text-xs text-muted-foreground">Email</p>
+                  <p>{user?.email}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground">Status</p>
-                  <p className="capitalize">{hospital.status}</p>
+                  <p className="text-xs text-muted-foreground">Role</p>
+                  <p className="capitalize">{role ?? "—"}</p>
                 </div>
-              </>
-            ) : null}
-          </CardContent>
-        </Card>
-      </div>
+                {hospital ? (
+                  <>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Hospital</p>
+                      <p>
+                        {hospital.name} — {hospital.location}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Status</p>
+                      <p className="capitalize">{hospital.status}</p>
+                    </div>
+                  </>
+                ) : null}
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      )}
     </>
   );
 }

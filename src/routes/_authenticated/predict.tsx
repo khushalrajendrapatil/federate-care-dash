@@ -1,8 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
 import { useState } from "react";
 import { Info, Loader2, Sparkles } from "lucide-react";
-import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { PageHeader } from "@/components/AppShell";
@@ -22,12 +22,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  apiFetch,
-  normalizeFeatureNames,
-  normalizePrediction,
-  type PredictionResult,
-} from "@/lib/api";
+import { getFeatureSchema, runPrediction } from "@/lib/fl.functions";
+import type { PredictionResult } from "@/lib/fl-types";
 
 export const Route = createFileRoute("/_authenticated/predict")({
   head: () => ({
@@ -49,7 +45,8 @@ export const Route = createFileRoute("/_authenticated/predict")({
 
 function riskToken(level: string) {
   const l = level.toLowerCase();
-  if (l.includes("high")) return { text: "text-risk-high", bg: "bg-risk-high/12 border-risk-high/30" };
+  if (l.includes("high"))
+    return { text: "text-risk-high", bg: "bg-risk-high/12 border-risk-high/30" };
   if (l.includes("mod") || l.includes("med"))
     return { text: "text-risk-moderate", bg: "bg-risk-moderate/12 border-risk-moderate/30" };
   return { text: "text-risk-low", bg: "bg-risk-low/12 border-risk-low/30" };
@@ -57,62 +54,52 @@ function riskToken(level: string) {
 
 function PredictPage() {
   const { hospital } = useAuth();
+  const qc = useQueryClient();
+  const schemaFn = useServerFn(getFeatureSchema);
+  const predictFn = useServerFn(runPrediction);
+
   const [values, setValues] = useState<Record<string, string>>({});
   const [patientId, setPatientId] = useState("none");
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<PredictionResult | null>(null);
   const [error, setError] = useState<unknown>(null);
 
-  const features = useQuery({
-    queryKey: ["feature-names"],
-    queryFn: async () => normalizeFeatureNames(await apiFetch<unknown>("/api/feature-names")),
+  const schema = useQuery({
+    queryKey: ["feature-schema"],
+    queryFn: () => schemaFn(),
     retry: false,
   });
 
   const patients = useQuery({
     queryKey: ["patients-select", hospital?.id],
     queryFn: async () => {
-      const { data } = await supabase
+      const { data, error: dbError } = await supabase
         .from("patients")
         .select("id,age,gender,disease_category")
         .order("created_at", { ascending: false });
+      if (dbError) throw new Error(dbError.message);
       return data ?? [];
     },
     enabled: Boolean(hospital?.id),
   });
 
-  const names = features.data ?? [];
+  const names = schema.data?.featureNames ?? [];
+  const trained = schema.data?.trained ?? false;
 
   const submit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setSubmitting(true);
     setError(null);
     setResult(null);
-
-    const featureValues = names.map((n) => Number(values[n] ?? 0));
-
     try {
-      const raw = await apiFetch<unknown>("/api/predict", {
-        method: "POST",
-        body: JSON.stringify({
-          features: featureValues,
-          values: featureValues,
-          data: Object.fromEntries(names.map((n, i) => [n, featureValues[i]])),
-        }),
-        timeoutMs: 60_000,
+      const features = names.map((n) => Number(values[n] ?? 0));
+      const res = await predictFn({
+        data: { features, patientId: patientId === "none" ? null : patientId },
       });
-      const parsed = normalizePrediction(raw);
-      setResult(parsed);
-
-      const { error: dbError } = await supabase.from("predictions").insert({
-        hospital_id: hospital?.id ?? null,
-        patient_id: patientId === "none" ? null : patientId,
-        risk_percentage: parsed.riskPercentage,
-        risk_level: parsed.riskLevel,
-        recommended_action: parsed.recommendedAction,
-        shap_explanation: parsed.shap as unknown as never,
-      });
-      if (dbError) toast.error(`Prediction succeeded but logging failed: ${dbError.message}`);
+      setResult(res);
+      void qc.invalidateQueries({ queryKey: ["prediction-history"] });
+      void qc.invalidateQueries({ queryKey: ["dashboard"] });
+      void qc.invalidateQueries({ queryKey: ["ledger"] });
     } catch (err) {
       setError(err);
     } finally {
@@ -120,14 +107,13 @@ function PredictPage() {
     }
   };
 
-  const fillZeros = () =>
-    setValues(Object.fromEntries(names.map((n) => [n, values[n] ?? "0"])));
+  const fillZeros = () => setValues(Object.fromEntries(names.map((n) => [n, values[n] ?? "0"])));
 
   return (
     <>
       <PageHeader
         title="Disease risk prediction"
-        description="Feature values are scored by the current global federated model."
+        description="Feature values are scored by the current global federated model inside this application."
       />
 
       <Alert className="mb-5">
@@ -135,20 +121,24 @@ function PredictPage() {
         <AlertDescription>Demo data only — do not enter real patient information.</AlertDescription>
       </Alert>
 
-      {features.isLoading ? (
+      {schema.isLoading ? (
         <div className="grid gap-3 sm:grid-cols-3">
           {Array.from({ length: 9 }).map((_, i) => (
             <Skeleton key={i} className="h-16" />
           ))}
         </div>
-      ) : features.error ? (
-        <ApiErrorNotice error={features.error} />
+      ) : schema.error ? (
+        <ApiErrorNotice error={schema.error} title="Could not load the model schema" />
+      ) : !trained ? (
+        <ApiErrorNotice error={new Error("No global model has been trained yet.")} />
       ) : (
         <form onSubmit={submit} className="space-y-6">
           <Card className="shadow-[var(--shadow-card)]">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="text-base">Clinical feature values ({names.length})</CardTitle>
-              <div className="flex items-center gap-3">
+            <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <CardTitle className="text-base">
+                Clinical feature values ({names.length}) · model {schema.data?.version}
+              </CardTitle>
+              <div className="flex flex-wrap items-center gap-3">
                 <Select value={patientId} onValueChange={setPatientId}>
                   <SelectTrigger className="w-60">
                     <SelectValue placeholder="Link to a patient (optional)" />
@@ -199,7 +189,7 @@ function PredictPage() {
 
       {error ? (
         <div className="mt-6">
-          <ApiErrorNotice error={error} />
+          <ApiErrorNotice error={error} title="Prediction failed" />
         </div>
       ) : null}
 
@@ -217,13 +207,21 @@ function PredictPage() {
               >
                 {result.riskPercentage.toFixed(1)}%
               </p>
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <p className="text-xs text-muted-foreground">Model confidence</p>
+                  <p>{(result.confidence * 100).toFixed(1)}%</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Model version</p>
+                  <p className="font-mono text-xs">{result.modelVersion}</p>
+                </div>
+              </div>
               <div>
                 <p className="text-xs tracking-wide text-muted-foreground uppercase">
                   Recommended action
                 </p>
-                <p className="mt-1 text-sm">
-                  {result.recommendedAction || "No recommendation returned."}
-                </p>
+                <p className="mt-1 text-sm">{result.recommendedAction}</p>
               </div>
             </CardContent>
           </Card>
@@ -233,7 +231,13 @@ function PredictPage() {
               <CardTitle className="text-base">Why the model decided this</CardTitle>
             </CardHeader>
             <CardContent>
-              <ShapChart items={result.shap} />
+              {result.explanationAvailable ? (
+                <ShapChart items={result.shap} />
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  An explanation is not available for this prediction.
+                </p>
+              )}
             </CardContent>
           </Card>
         </div>

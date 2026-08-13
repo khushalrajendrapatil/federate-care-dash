@@ -14,6 +14,203 @@ export type Database = {
   }
   public: {
     Tables: {
+      audit_events: {
+        Row: {
+          actor_id: string | null
+          actor_label: string | null
+          created_at: string
+          event_type: string
+          hash: string
+          hospital_id: string | null
+          id: string
+          model_version: string | null
+          payload: Json
+          previous_hash: string
+          round_number: number | null
+          seq: number
+        }
+        Insert: {
+          actor_id?: string | null
+          actor_label?: string | null
+          created_at?: string
+          event_type: string
+          hash: string
+          hospital_id?: string | null
+          id?: string
+          model_version?: string | null
+          payload?: Json
+          previous_hash: string
+          round_number?: number | null
+          seq?: never
+        }
+        Update: {
+          actor_id?: string | null
+          actor_label?: string | null
+          created_at?: string
+          event_type?: string
+          hash?: string
+          hospital_id?: string | null
+          id?: string
+          model_version?: string | null
+          payload?: Json
+          previous_hash?: string
+          round_number?: number | null
+          seq?: never
+        }
+        Relationships: []
+      }
+      dataset_samples: {
+        Row: {
+          created_at: string
+          dataset_id: string
+          external_ref: string | null
+          features: number[]
+          hospital_id: string
+          id: string
+          label: number
+          split: string
+        }
+        Insert: {
+          created_at?: string
+          dataset_id: string
+          external_ref?: string | null
+          features: number[]
+          hospital_id: string
+          id?: string
+          label: number
+          split?: string
+        }
+        Update: {
+          created_at?: string
+          dataset_id?: string
+          external_ref?: string | null
+          features?: number[]
+          hospital_id?: string
+          id?: string
+          label?: number
+          split?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dataset_samples_dataset_id_fkey"
+            columns: ["dataset_id"]
+            isOneToOne: false
+            referencedRelation: "datasets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dataset_samples_hospital_id_fkey"
+            columns: ["hospital_id"]
+            isOneToOne: false
+            referencedRelation: "hospitals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      datasets: {
+        Row: {
+          created_at: string
+          feature_names: Json
+          hospital_id: string
+          id: string
+          name: string
+          sample_count: number
+          source: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          feature_names?: Json
+          hospital_id: string
+          id?: string
+          name: string
+          sample_count?: number
+          source?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          feature_names?: Json
+          hospital_id?: string
+          id?: string
+          name?: string
+          sample_count?: number
+          source?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "datasets_hospital_id_fkey"
+            columns: ["hospital_id"]
+            isOneToOne: false
+            referencedRelation: "hospitals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      global_models: {
+        Row: {
+          bias: number
+          created_at: string
+          dp_clip_norm: number
+          dp_noise_multiplier: number
+          feature_means: number[]
+          feature_names: Json
+          feature_stds: number[]
+          history: Json
+          id: string
+          is_active: boolean
+          metrics: Json
+          participating_hospitals: number
+          rounds_completed: number
+          secure_aggregation: boolean
+          test_samples: number
+          training_samples: number
+          version: string
+          weights: number[]
+        }
+        Insert: {
+          bias?: number
+          created_at?: string
+          dp_clip_norm?: number
+          dp_noise_multiplier?: number
+          feature_means: number[]
+          feature_names: Json
+          feature_stds: number[]
+          history?: Json
+          id?: string
+          is_active?: boolean
+          metrics?: Json
+          participating_hospitals?: number
+          rounds_completed?: number
+          secure_aggregation?: boolean
+          test_samples?: number
+          training_samples?: number
+          version: string
+          weights: number[]
+        }
+        Update: {
+          bias?: number
+          created_at?: string
+          dp_clip_norm?: number
+          dp_noise_multiplier?: number
+          feature_means?: number[]
+          feature_names?: Json
+          feature_stds?: number[]
+          history?: Json
+          id?: string
+          is_active?: boolean
+          metrics?: Json
+          participating_hospitals?: number
+          rounds_completed?: number
+          secure_aggregation?: boolean
+          test_samples?: number
+          training_samples?: number
+          version?: string
+          weights?: number[]
+        }
+        Relationships: []
+      }
       hospitals: {
         Row: {
           created_at: string
@@ -44,45 +241,84 @@ export type Database = {
         }
         Relationships: []
       }
-      models: {
+      local_updates: {
         Row: {
-          accuracy: number | null
           created_at: string
-          f1_score: number | null
-          history: Json
+          hospital_id: string
           id: string
-          ledger_block_hash: string | null
-          precision_score: number | null
-          recall: number | null
-          rounds_completed: number | null
-          training_date: string
-          version: string
+          local_accuracy: number | null
+          local_loss: number | null
+          masked: boolean
+          round_id: string
+          sample_count: number
+          update_hash: string
         }
         Insert: {
-          accuracy?: number | null
           created_at?: string
-          f1_score?: number | null
-          history?: Json
+          hospital_id: string
           id?: string
-          ledger_block_hash?: string | null
-          precision_score?: number | null
-          recall?: number | null
-          rounds_completed?: number | null
-          training_date?: string
-          version: string
+          local_accuracy?: number | null
+          local_loss?: number | null
+          masked?: boolean
+          round_id: string
+          sample_count: number
+          update_hash: string
         }
         Update: {
-          accuracy?: number | null
           created_at?: string
-          f1_score?: number | null
-          history?: Json
+          hospital_id?: string
           id?: string
-          ledger_block_hash?: string | null
-          precision_score?: number | null
-          recall?: number | null
-          rounds_completed?: number | null
-          training_date?: string
-          version?: string
+          local_accuracy?: number | null
+          local_loss?: number | null
+          masked?: boolean
+          round_id?: string
+          sample_count?: number
+          update_hash?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "local_updates_hospital_id_fkey"
+            columns: ["hospital_id"]
+            isOneToOne: false
+            referencedRelation: "hospitals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "local_updates_round_id_fkey"
+            columns: ["round_id"]
+            isOneToOne: false
+            referencedRelation: "training_rounds"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notifications: {
+        Row: {
+          body: string | null
+          created_at: string
+          id: string
+          level: string
+          read: boolean
+          title: string
+          user_id: string
+        }
+        Insert: {
+          body?: string | null
+          created_at?: string
+          id?: string
+          level?: string
+          read?: boolean
+          title: string
+          user_id: string
+        }
+        Update: {
+          body?: string | null
+          created_at?: string
+          id?: string
+          level?: string
+          read?: boolean
+          title?: string
+          user_id?: string
         }
         Relationships: []
       }
@@ -126,37 +362,58 @@ export type Database = {
       }
       predictions: {
         Row: {
+          confidence: number | null
           created_at: string
           created_by: string
+          explanation_available: boolean
           hospital_id: string | null
           id: string
+          input_features: Json | null
+          model_version: string | null
           patient_id: string | null
+          predicted_label: number | null
+          probability: number | null
           recommended_action: string | null
           risk_level: string
           risk_percentage: number
           shap_explanation: Json
+          status: string
         }
         Insert: {
+          confidence?: number | null
           created_at?: string
           created_by?: string
+          explanation_available?: boolean
           hospital_id?: string | null
           id?: string
+          input_features?: Json | null
+          model_version?: string | null
           patient_id?: string | null
+          predicted_label?: number | null
+          probability?: number | null
           recommended_action?: string | null
           risk_level: string
           risk_percentage: number
           shap_explanation?: Json
+          status?: string
         }
         Update: {
+          confidence?: number | null
           created_at?: string
           created_by?: string
+          explanation_available?: boolean
           hospital_id?: string | null
           id?: string
+          input_features?: Json | null
+          model_version?: string | null
           patient_id?: string | null
+          predicted_label?: number | null
+          probability?: number | null
           recommended_action?: string | null
           risk_level?: string
           risk_percentage?: number
           shap_explanation?: Json
+          status?: string
         }
         Relationships: [
           {
@@ -171,6 +428,50 @@ export type Database = {
             columns: ["patient_id"]
             isOneToOne: false
             referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      training_rounds: {
+        Row: {
+          created_at: string
+          global_accuracy: number | null
+          id: string
+          metrics: Json
+          model_id: string | null
+          participating_hospitals: number
+          round_number: number
+          run_id: string
+          weights_hash: string | null
+        }
+        Insert: {
+          created_at?: string
+          global_accuracy?: number | null
+          id?: string
+          metrics?: Json
+          model_id?: string | null
+          participating_hospitals?: number
+          round_number: number
+          run_id: string
+          weights_hash?: string | null
+        }
+        Update: {
+          created_at?: string
+          global_accuracy?: number | null
+          id?: string
+          metrics?: Json
+          model_id?: string | null
+          participating_hospitals?: number
+          round_number?: number
+          run_id?: string
+          weights_hash?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "training_rounds_model_id_fkey"
+            columns: ["model_id"]
+            isOneToOne: false
+            referencedRelation: "global_models"
             referencedColumns: ["id"]
           },
         ]
@@ -201,6 +502,20 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      audit_block_payload: {
+        Args: {
+          _actor_id: string
+          _created_at: string
+          _event_type: string
+          _hospital_id: string
+          _model_version: string
+          _payload: Json
+          _previous_hash: string
+          _round_number: number
+          _seq: number
+        }
+        Returns: string
+      }
       current_hospital_id: { Args: never; Returns: string }
       has_role: {
         Args: {
@@ -208,6 +523,14 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      verify_audit_chain: {
+        Args: never
+        Returns: {
+          first_broken_seq: number
+          total: number
+          valid: boolean
+        }[]
       }
     }
     Enums: {

@@ -1,54 +1,49 @@
-# MedFed — Federated Learning Healthcare Prediction
+# MedFed — Federated Health AI
 
-A React dashboard for a federated-learning healthcare platform. This project was built with [Lovable](https://lovable.dev).
+MedFed is a privacy-preserving healthcare prediction platform. Everything runs inside this
+Lovable project: there is **no external Python service and no `localhost` dependency**.
 
-## Architecture (authoritative)
+## Architecture
 
-- **Frontend**: React 19 + TanStack Start (TanStack Router), TypeScript, Tailwind CSS, Recharts.
-- **Backend**: Lovable Cloud (Supabase) — Postgres with Row Level Security, Supabase Auth, and
-  server functions where needed. There is **no** Python/Django backend inside this repository.
-- **Auth & roles**: Supabase Auth (email/password). Roles live in the `user_roles` table
-  (`admin` | `hospital`) and are enforced with RLS via the `has_role()` security-definer function.
-  The first account created becomes the admin; hospital accounts require admin approval.
-- **Data**: `hospitals`, `patients`, `models`, `predictions`, `user_roles`.
-- **Live updates**: any future notification or live-update feature uses **Supabase Realtime**
-  subscriptions.
-
-Not used anywhere in this project: Django, Django REST Framework, Django Channels, Celery, Redis,
-Docker/Docker Compose, Nginx, drf-yasg/Swagger, `manage.py`. There is no auto-generated API
-documentation page; if API docs are wanted they must be written manually as a normal page.
-
-## External Python ML service
-
-All machine learning — federated training, predictions, SHAP explainability, and the hash-chained
-ledger — is computed by a **separate, externally deployed Python API**. This app never computes,
-simulates, or fakes those values; it calls the service over HTTP and stores the returned results in
-Supabase for history and display.
-
-Endpoints consumed (`src/lib/api.ts`):
-
-| Method | Path | Purpose |
-| --- | --- | --- |
-| POST | `/api/train?rounds={n}&local_epochs=8` | Runs federated training, returns round-by-round history |
-| POST | `/api/predict` | Returns risk percentage, risk level, recommended action, real SHAP values |
-| GET | `/api/audit-trail` | Returns the real hash-chained ledger (`valid` flag + block list) |
-| GET | `/api/feature-names` | Returns the 30 field names used to build the prediction form |
-
-Training results are persisted to `models`; prediction results to `predictions`. The audit trail is
-rendered directly from the service response — the `valid` status is shown prominently and each
-block shows its actual (truncated) hash, previous hash, and round number.
-
-### Configuration
-
-Set the service base URL with the `VITE_FL_API_URL` environment variable (legacy
-`VITE_ML_API_BASE_URL` is still read as a fallback). It can also be overridden per browser on the
-in-app **Settings** page for testing.
-
-## Development
-
-```sh
-git clone <this-repository-url>
-cd <repository-name>
-npm i
-npm run dev
 ```
+Lovable app (TanStack Start + React)
+├── Authentication ......... Lovable Cloud auth (email/password), roles in user_roles
+├── Database ............... Postgres with row-level security on every table
+├── Server functions ....... src/lib/fl.functions.ts  (typed RPC, auth-checked)
+│   └── ML engine .......... src/lib/ml/fedlearn.server.ts (runs server-side only)
+├── Federated learning ..... FedAvg over per-hospital dataset shards
+├── Prediction + SHAP ...... logistic-regression scoring with exact linear Shapley values
+├── Audit / hash ledger .... audit_events, SHA-256 chained, verify_audit_chain()
+└── Dashboard .............. role-aware analytics
+```
+
+## Modules
+
+- **Auth & roles** — the first account becomes admin; later accounts register a hospital that
+  stays *pending* until an admin approves it.
+- **Datasets** — each hospital imports a demo shard or uploads a CSV (30 numeric features +
+  label). Rows are stored per hospital and protected by RLS.
+- **Federated training (admin)** — the server initialises a global model, trains locally on each
+  hospital's shard, clips and noises each update (differential privacy), masks updates pairwise
+  (secure aggregation), averages them (FedAvg) and evaluates the global model on a held-out split.
+  Round history, metrics and weights hashes are stored in `global_models` / `training_rounds`.
+- **Prediction** — the active global model scores 30 standardised features and returns
+  probability, risk level, confidence and SHAP contributions. Every prediction is stored.
+- **Explainability** — exact Shapley values for the linear model (`weight × standardised value`).
+  If no model is active, the UI says the explanation is unavailable rather than inventing one.
+- **Audit trail** — sign-in/out, dataset changes, hospital approvals, training rounds,
+  aggregation, model versions and predictions are appended to a SHA-256 hash chain; the Audit
+  page re-verifies every record and reports the first broken sequence number if tampered with.
+- **Settings** — read-only service, model, federated and privacy status. No API URL to enter.
+
+## Database tables
+
+`hospitals`, `user_roles`, `patients`, `datasets`, `dataset_samples`, `global_models`,
+`training_rounds`, `local_updates`, `predictions`, `audit_events`, `notifications`.
+
+## Notes
+
+- The demo dataset is the public UCI Wisconsin Diagnostic Breast Cancer set — synthetic/demo use
+  only. Never enter real patient information.
+- The model is L2-regularised logistic regression, chosen because it trains deterministically in
+  the serverless runtime and yields exact SHAP values. Deep models would need a GPU host.
