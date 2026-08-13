@@ -8,7 +8,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import type { RoundRecord } from "@/lib/api";
+import type { RoundDto } from "@/lib/fl-types";
 
 const SERIES_COLORS = [
   "var(--color-chart-2)",
@@ -18,7 +18,7 @@ const SERIES_COLORS = [
 ];
 
 /** Accuracy per federated round, exactly as returned by the training API. */
-export function AccuracyChart({ rounds }: { rounds: RoundRecord[] }) {
+export function AccuracyChart({ rounds }: { rounds: RoundDto[] }) {
   if (!rounds.length) {
     return <p className="text-sm text-muted-foreground">No training history available yet.</p>;
   }

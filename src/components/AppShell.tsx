@@ -5,6 +5,8 @@ import {
   Blocks,
   Building2,
   Cpu,
+  Database,
+  History,
   LogOut,
   Settings,
   Stethoscope,
@@ -18,7 +20,9 @@ import { cn } from "@/lib/utils";
 const NAV = [
   { to: "/dashboard", label: "Dashboard", icon: BarChart3, roles: ["admin", "hospital"] },
   { to: "/patients", label: "Patients", icon: Users, roles: ["hospital"] },
+  { to: "/datasets", label: "Datasets", icon: Database, roles: ["admin", "hospital"] },
   { to: "/predict", label: "Prediction", icon: Stethoscope, roles: ["admin", "hospital"] },
+  { to: "/history", label: "History", icon: History, roles: ["admin", "hospital"] },
   { to: "/training", label: "Train Model", icon: Cpu, roles: ["admin"] },
   { to: "/hospitals", label: "Hospitals", icon: Building2, roles: ["admin"] },
   { to: "/audit", label: "Audit Trail", icon: Blocks, roles: ["admin", "hospital"] },

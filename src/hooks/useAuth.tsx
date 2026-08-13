@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
+import { logAuditEvent } from "@/lib/fl.functions";
 
 export type Role = "admin" | "hospital";
 
@@ -54,6 +55,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (event !== "SIGNED_IN" && event !== "SIGNED_OUT" && event !== "USER_UPDATED") return;
       setSession(next);
       setTimeout(() => void loadProfile(next?.user?.id), 0);
+      if (event === "SIGNED_IN") {
+        setTimeout(() => {
+          void logAuditEvent({ data: { eventType: "auth.signed_in" } }).catch(() => undefined);
+        }, 0);
+      }
     });
 
     void (async () => {
@@ -79,6 +85,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       hospital,
       refresh: () => loadProfile(session?.user?.id),
       signOut: async () => {
+        await logAuditEvent({ data: { eventType: "auth.signed_out" } }).catch(() => undefined);
         await supabase.auth.signOut();
         setSession(null);
         setRole(null);

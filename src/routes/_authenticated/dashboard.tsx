@@ -1,15 +1,18 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { Activity, Building2, Gauge, Stethoscope, Users } from "lucide-react";
+import { useServerFn } from "@tanstack/react-start";
+import { Activity, Building2, Database, Gauge, ShieldCheck, Stethoscope, Users } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { PageHeader } from "@/components/AppShell";
 import { StatCard } from "@/components/StatCard";
 import { AccuracyChart } from "@/components/AccuracyChart";
+import { ApiErrorNotice } from "@/components/ApiErrorNotice";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { RoundRecord } from "@/lib/api";
+import { getSystemStatus } from "@/lib/fl.functions";
+import type { RoundDto } from "@/lib/fl-types";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({
@@ -17,7 +20,8 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
       { title: "Dashboard — MedFed" },
       {
         name: "description",
-        content: "Federated network analytics: hospitals, patients, model accuracy and predictions.",
+        content:
+          "Federated network analytics: hospitals, patients, model accuracy, privacy and predictions.",
       },
       { property: "og:title", content: "Dashboard — MedFed" },
       {
@@ -34,6 +38,7 @@ type PredictionRow = {
   risk_percentage: number;
   risk_level: string;
   recommended_action: string | null;
+  model_version: string | null;
   created_at: string;
 };
 
@@ -48,11 +53,18 @@ function riskClass(level: string) {
 function DashboardPage() {
   const { role, hospital } = useAuth();
   const isAdmin = role === "admin";
+  const statusFn = useServerFn(getSystemStatus);
 
-  const { data, isLoading } = useQuery({
+  const status = useQuery({
+    queryKey: ["system-status"],
+    queryFn: () => statusFn(),
+    retry: false,
+  });
+
+  const { data, isLoading, error } = useQuery({
     queryKey: ["dashboard", role, hospital?.id],
     queryFn: async () => {
-      const [hospitals, patients, models, predictions] = await Promise.all([
+      const [hospitals, patients, model, predictions, predictionCount] = await Promise.all([
         supabase.from("hospitals").select("id,name,status"),
         isAdmin
           ? supabase.from("patients").select("id", { count: "exact", head: true })
@@ -61,31 +73,31 @@ function DashboardPage() {
               .select("id", { count: "exact", head: true })
               .eq("hospital_id", hospital?.id ?? ""),
         supabase
-          .from("models")
-          .select("*")
-          .order("training_date", { ascending: false })
-          .limit(1)
+          .from("global_models")
+          .select("version,metrics,history,rounds_completed,created_at")
+          .eq("is_active", true)
           .maybeSingle(),
         supabase
           .from("predictions")
-          .select("id,risk_percentage,risk_level,recommended_action,created_at")
+          .select("id,risk_percentage,risk_level,recommended_action,model_version,created_at")
           .order("created_at", { ascending: false })
           .limit(10),
+        supabase.from("predictions").select("id", { count: "exact", head: true }),
       ]);
 
-      const { count: predictionCount } = await supabase
-        .from("predictions")
-        .select("id", { count: "exact", head: true });
+      if (hospitals.error) throw new Error(hospitals.error.message);
 
       return {
         hospitals: hospitals.data ?? [],
         patientCount: patients.count ?? 0,
-        model: models.data,
+        model: model.data,
         predictions: (predictions.data ?? []) as PredictionRow[],
-        predictionCount: predictionCount ?? 0,
+        predictionCount: predictionCount.count ?? 0,
       };
     },
   });
+
+  if (error) return <ApiErrorNotice error={error} title="Could not load the dashboard" />;
 
   if (isLoading || !data) {
     return (
@@ -101,9 +113,11 @@ function DashboardPage() {
     );
   }
 
-  const history = (data.model?.history ?? []) as unknown as RoundRecord[];
+  const history = (data.model?.history ?? []) as unknown as RoundDto[];
   const pending = data.hospitals.filter((h) => h.status === "pending").length;
-  const accuracy = data.model?.accuracy != null ? `${Number(data.model.accuracy).toFixed(2)}%` : "—";
+  const approved = data.hospitals.filter((h) => h.status === "approved").length;
+  const metrics = (data.model?.metrics ?? {}) as Record<string, number>;
+  const accuracy = metrics["accuracy"] != null ? `${Number(metrics["accuracy"]).toFixed(2)}%` : "—";
 
   const myLocal = (() => {
     if (isAdmin || !hospital) return null;
@@ -123,50 +137,91 @@ function DashboardPage() {
         description={
           isAdmin
             ? "Aggregate statistics across every participating hospital."
-            : "Statistics scoped to your hospital only."
+            : "Your hospital's data, participation and prediction activity."
         }
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {isAdmin ? (
-          <StatCard
-            label="Hospitals"
-            value={data.hospitals.length}
-            hint={`${pending} pending approval`}
-            icon={Building2}
-          />
+          <>
+            <StatCard
+              icon={Building2}
+              label="Hospitals"
+              value={String(data.hospitals.length)}
+              hint={`${approved} active · ${pending} pending`}
+            />
+            <StatCard icon={Users} label="Patients" value={String(data.patientCount)} />
+          </>
         ) : (
-          <StatCard
-            label="Local accuracy"
-            value={myLocal ? `${myLocal.accuracy.toFixed(2)}%` : "—"}
-            hint={myLocal ? `Round ${myLocal.round}` : "Not in last training run"}
-            icon={Activity}
-          />
+          <>
+            <StatCard icon={Users} label="My patients" value={String(data.patientCount)} />
+            <StatCard
+              icon={Database}
+              label="My training samples"
+              value={String(status.data?.federated.totalTrainingSamples ?? 0)}
+              hint="Contributed to federated rounds"
+            />
+          </>
         )}
         <StatCard
-          label="Patients"
-          value={data.patientCount}
-          hint={isAdmin ? "Across all hospitals" : "Your records"}
-          icon={Users}
-        />
-        <StatCard
+          icon={Gauge}
           label="Global model accuracy"
           value={accuracy}
-          hint={data.model?.version ? `Version ${data.model.version}` : "No model trained yet"}
-          icon={Gauge}
+          hint={
+            data.model
+              ? `${data.model.version} · ${data.model.rounds_completed} rounds`
+              : "No model trained yet"
+          }
         />
         <StatCard
-          label="Predictions"
-          value={isAdmin ? data.predictionCount : data.predictions.length}
-          hint={isAdmin ? "Logged network-wide" : "Logged by your hospital"}
           icon={Stethoscope}
+          label="Predictions"
+          value={String(data.predictionCount)}
+          hint={myLocal ? `My last local accuracy ${myLocal.accuracy.toFixed(2)}%` : undefined}
         />
       </div>
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-5">
+      <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard
+          icon={ShieldCheck}
+          label="Ledger integrity"
+          value={status.data ? (status.data.ledger.valid ? "Valid" : "Broken") : "—"}
+          hint={`${status.data?.ledger.total ?? 0} audited events`}
+        />
+        <StatCard
+          icon={Activity}
+          label="Model status"
+          value={status.data?.model.trained ? "Trained" : "Not trained"}
+          hint={
+            status.data?.model.trainedAt
+              ? new Date(status.data.model.trainedAt).toLocaleString()
+              : "Run a federated round"
+          }
+        />
+        <StatCard
+          icon={Database}
+          label="Database"
+          value={status.data?.database.ok ? "Connected" : "Unavailable"}
+          hint={status.data?.database.message}
+        />
+        <StatCard
+          icon={ShieldCheck}
+          label="Privacy"
+          value={status.data?.privacy.differentialPrivacy ? "DP + secure agg." : "—"}
+          hint={
+            status.data
+              ? `noise ${status.data.privacy.noiseMultiplier} · clip ${status.data.privacy.clipNorm}`
+              : undefined
+          }
+        />
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-5">
         <Card className="shadow-[var(--shadow-card)] lg:col-span-3">
           <CardHeader>
-            <CardTitle className="text-base">Accuracy per federated round</CardTitle>
+            <CardTitle className="text-base">
+              Federated accuracy per round {data.model ? `· ${data.model.version}` : ""}
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <AccuracyChart rounds={history} />
@@ -178,24 +233,20 @@ function DashboardPage() {
             <CardTitle className="text-base">Recent predictions</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {data.predictions.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No predictions logged yet.</p>
+            {!data.predictions.length ? (
+              <p className="text-sm text-muted-foreground">No predictions recorded yet.</p>
             ) : (
               data.predictions.map((p) => (
-                <div
-                  key={p.id}
-                  className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2"
-                >
+                <div key={p.id} className="flex items-center justify-between gap-3 text-sm">
                   <div className="min-w-0">
-                    <p className="text-sm font-medium">
-                      {Number(p.risk_percentage).toFixed(1)}% risk
-                    </p>
-                    <p className="truncate text-xs text-muted-foreground">
+                    <p className="truncate">{p.recommended_action ?? "—"}</p>
+                    <p className="text-xs text-muted-foreground">
                       {new Date(p.created_at).toLocaleString()}
+                      {p.model_version ? ` · ${p.model_version}` : ""}
                     </p>
                   </div>
                   <Badge variant="outline" className={riskClass(p.risk_level)}>
-                    {p.risk_level}
+                    {p.risk_percentage.toFixed(1)}%
                   </Badge>
                 </div>
               ))

@@ -1,5 +1,5 @@
 import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import type { ShapItem } from "@/lib/api";
+import type { ShapItem } from "@/lib/fl-types";
 
 /**
  * Horizontal SHAP contribution chart with a plain-language legend, so a

@@ -1,9 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
-import { Cpu, Loader2 } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
+import { useState } from "react";
+import { Cpu, Loader2, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { PageHeader } from "@/components/AppShell";
 import { AccuracyChart } from "@/components/AccuracyChart";
@@ -13,6 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Table,
   TableBody,
@@ -21,7 +22,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { apiFetch, normalizeTraining, type TrainingResult } from "@/lib/api";
+import { listDatasets, trainGlobalModel } from "@/lib/fl.functions";
+import type { TrainingResultDto } from "@/lib/fl-types";
 
 export const Route = createFileRoute("/_authenticated/training")({
   head: () => ({
@@ -29,7 +31,8 @@ export const Route = createFileRoute("/_authenticated/training")({
       { title: "Train global model — MedFed" },
       {
         name: "description",
-        content: "Trigger a federated training run across participating hospitals and review round-by-round accuracy.",
+        content:
+          "Run federated training across participating hospitals and review round-by-round accuracy.",
       },
       { property: "og:title", content: "Train global model — MedFed" },
       {
@@ -41,61 +44,41 @@ export const Route = createFileRoute("/_authenticated/training")({
   component: TrainingPage,
 });
 
-const STAGES = [
-  "Contacting the federated learning service…",
-  "Distributing the global model to hospitals…",
-  "Training locally at each hospital…",
-  "Collecting encrypted model updates…",
-  "Aggregating the global model…",
-  "Evaluating global metrics and writing the ledger block…",
-];
-
 function TrainingPage() {
   const { role } = useAuth();
   const qc = useQueryClient();
-  const [rounds, setRounds] = useState(15);
-  const [running, setRunning] = useState(false);
-  const [stage, setStage] = useState(0);
-  const [result, setResult] = useState<TrainingResult | null>(null);
-  const [error, setError] = useState<unknown>(null);
-  const timer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const trainFn = useServerFn(trainGlobalModel);
+  const datasetsFn = useServerFn(listDatasets);
 
-  useEffect(() => () => void (timer.current && clearInterval(timer.current)), []);
+  const [rounds, setRounds] = useState(15);
+  const [localEpochs, setLocalEpochs] = useState(8);
+  const [noise, setNoise] = useState(0.05);
+  const [running, setRunning] = useState(false);
+  const [result, setResult] = useState<TrainingResultDto | null>(null);
+  const [error, setError] = useState<unknown>(null);
+
+  const datasets = useQuery({
+    queryKey: ["datasets", "all"],
+    queryFn: () => datasetsFn(),
+    enabled: role === "admin",
+    retry: false,
+  });
 
   const start = async () => {
     setRunning(true);
     setError(null);
     setResult(null);
-    setStage(0);
-    timer.current = setInterval(() => setStage((s) => Math.min(s + 1, STAGES.length - 1)), 9000);
-
     try {
-      const raw = await apiFetch<unknown>(
-        `/api/train?rounds=${rounds}&local_epochs=8`,
-        { method: "POST", timeoutMs: 300_000 },
-      );
-      const parsed = normalizeTraining(raw);
-      setResult(parsed);
-
-      const { error: dbError } = await supabase.from("models").insert({
-        version: parsed.version,
-        accuracy: parsed.finalMetrics["accuracy"] ?? null,
-        precision_score: parsed.finalMetrics["precision"] ?? null,
-        recall: parsed.finalMetrics["recall"] ?? null,
-        f1_score: parsed.finalMetrics["f1_score"] ?? parsed.finalMetrics["f1"] ?? null,
-        rounds_completed: parsed.rounds.length || rounds,
-        ledger_block_hash: parsed.blockHash,
-        history: parsed.rounds as unknown as never,
-      });
-      if (dbError) toast.error(`Training finished, but saving metadata failed: ${dbError.message}`);
-      else toast.success("Training complete — model metadata saved.");
-
+      const res = await trainFn({ data: { rounds, localEpochs, noiseMultiplier: noise } });
+      setResult(res);
+      toast.success(`Training complete — model ${res.version} is now active.`);
       void qc.invalidateQueries({ queryKey: ["dashboard"] });
-      void qc.invalidateQueries({ queryKey: ["audit-trail"] });
+      void qc.invalidateQueries({ queryKey: ["ledger"] });
+      void qc.invalidateQueries({ queryKey: ["system-status"] });
+      void qc.invalidateQueries({ queryKey: ["feature-schema"] });
     } catch (err) {
       setError(err);
     } finally {
-      if (timer.current) clearInterval(timer.current);
       setRunning(false);
     }
   };
@@ -104,16 +87,28 @@ function TrainingPage() {
     return <p className="text-sm text-muted-foreground">Administrator access only.</p>;
   }
 
+  const participants = datasets.data ?? [];
+  const totalSamples = participants.reduce((a, d) => a + d.sampleCount, 0);
+
   return (
     <>
       <PageHeader
         title="Train global model"
-        description="Runs a federated learning cycle on the prediction service. Training can take a minute or more."
+        description="Federated averaging runs server-side across each hospital's own dataset. Raw records never leave their hospital's shard — only clipped, noised model updates are aggregated."
       />
+
+      <Alert className="mb-6">
+        <ShieldCheck className="size-4" />
+        <AlertDescription>
+          {participants.length} hospital dataset{participants.length === 1 ? "" : "s"} registered ·{" "}
+          {totalSamples} samples available. Hospitals import or upload their data on the Datasets
+          page.
+        </AlertDescription>
+      </Alert>
 
       <Card className="mb-6 shadow-[var(--shadow-card)]">
         <CardContent className="flex flex-wrap items-end gap-4 p-6">
-          <div className="w-40 space-y-2">
+          <div className="w-36 space-y-2">
             <Label htmlFor="rounds">Federated rounds</Label>
             <Input
               id="rounds"
@@ -125,21 +120,48 @@ function TrainingPage() {
               onChange={(e) => setRounds(Number(e.target.value) || 1)}
             />
           </div>
+          <div className="w-36 space-y-2">
+            <Label htmlFor="epochs">Local epochs</Label>
+            <Input
+              id="epochs"
+              type="number"
+              min={1}
+              max={50}
+              value={localEpochs}
+              disabled={running}
+              onChange={(e) => setLocalEpochs(Number(e.target.value) || 1)}
+            />
+          </div>
+          <div className="w-44 space-y-2">
+            <Label htmlFor="noise">DP noise multiplier</Label>
+            <Input
+              id="noise"
+              type="number"
+              step="0.01"
+              min={0}
+              max={2}
+              value={noise}
+              disabled={running}
+              onChange={(e) => setNoise(Number(e.target.value))}
+            />
+          </div>
           <Button onClick={() => void start()} disabled={running}>
             {running ? <Loader2 className="size-4 animate-spin" /> : <Cpu className="size-4" />}
             {running ? "Training…" : "Start training"}
           </Button>
-          <p className="text-xs text-muted-foreground">Local epochs per round: 8</p>
         </CardContent>
       </Card>
 
       {running ? (
         <Card className="mb-6 shadow-[var(--shadow-card)]">
           <CardContent className="space-y-3 p-6">
-            <p className="text-sm font-medium">{STAGES[stage]}</p>
-            <Progress value={((stage + 1) / STAGES.length) * 100} />
+            <p className="text-sm font-medium">
+              Running {rounds} federated rounds server-side — local training, clipping, noise,
+              secure aggregation and evaluation.
+            </p>
+            <Progress value={undefined} className="animate-pulse" />
             <p className="text-xs text-muted-foreground">
-              The federated learning service is computing this run. Keep this page open.
+              Results appear only when the run has genuinely finished. Keep this page open.
             </p>
           </CardContent>
         </Card>
@@ -147,7 +169,7 @@ function TrainingPage() {
 
       {error ? (
         <div className="mb-6">
-          <ApiErrorNotice error={error} />
+          <ApiErrorNotice error={error} title="Training failed" />
         </div>
       ) : null}
 
@@ -155,7 +177,10 @@ function TrainingPage() {
         <div className="space-y-6">
           <Card className="shadow-[var(--shadow-card)]">
             <CardHeader>
-              <CardTitle className="text-base">Accuracy per round</CardTitle>
+              <CardTitle className="text-base">
+                Accuracy per round · {result.participatingHospitals} hospitals ·{" "}
+                {result.trainSamples} train / {result.testSamples} test samples
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <AccuracyChart rounds={result.rounds} />
@@ -173,21 +198,21 @@ function TrainingPage() {
                     <TableHead>Round</TableHead>
                     <TableHead>Global accuracy</TableHead>
                     <TableHead>Local accuracies</TableHead>
+                    <TableHead>Weights hash</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {result.rounds.map((r) => (
                     <TableRow key={r.round}>
                       <TableCell>{r.round}</TableCell>
-                      <TableCell>
-                        {r.globalAccuracy === null ? "—" : `${r.globalAccuracy.toFixed(2)}%`}
-                      </TableCell>
+                      <TableCell>{r.globalAccuracy.toFixed(2)}%</TableCell>
                       <TableCell className="text-muted-foreground">
                         {r.locals.length
-                          ? r.locals
-                              .map((l) => `${l.hospital}: ${l.accuracy.toFixed(2)}%`)
-                              .join(" · ")
+                          ? r.locals.map((l) => `${l.hospital}: ${l.accuracy.toFixed(2)}%`).join(" · ")
                           : "—"}
+                      </TableCell>
+                      <TableCell className="font-mono text-xs">
+                        {r.weightsHash.slice(0, 12)}…
                       </TableCell>
                     </TableRow>
                   ))}
@@ -198,21 +223,19 @@ function TrainingPage() {
 
           <Card className="shadow-[var(--shadow-card)]">
             <CardHeader>
-              <CardTitle className="text-base">Final global metrics</CardTitle>
+              <CardTitle className="text-base">Final global metrics · {result.version}</CardTitle>
             </CardHeader>
             <CardContent className="grid gap-4 sm:grid-cols-4">
               {Object.entries(result.finalMetrics).map(([k, v]) => (
                 <div key={k}>
                   <p className="text-xs text-muted-foreground capitalize">{k.replace(/_/g, " ")}</p>
-                  <p className="font-display text-xl font-semibold">{v.toFixed(2)}%</p>
+                  <p className="font-display text-xl font-semibold">{Number(v).toFixed(2)}%</p>
                 </div>
               ))}
-              {result.blockHash ? (
-                <div className="sm:col-span-4">
-                  <p className="text-xs text-muted-foreground">Ledger block hash</p>
-                  <p className="font-mono text-xs break-all">{result.blockHash}</p>
-                </div>
-              ) : null}
+              <div className="sm:col-span-4">
+                <p className="text-xs text-muted-foreground">Ledger block hash</p>
+                <p className="font-mono text-xs break-all">{result.ledgerHash}</p>
+              </div>
             </CardContent>
           </Card>
         </div>
