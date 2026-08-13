@@ -211,6 +211,7 @@ function DatasetsPage() {
                     </TableCell>
                     {canManage ? (
                       <TableCell className="text-right">
+                        {role === "admin" && d.hospitalName !== hospital?.name ? null : (
                         <Button
                           variant="ghost"
                           size="icon"
