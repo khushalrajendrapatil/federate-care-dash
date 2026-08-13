@@ -40,7 +40,8 @@ export const Route = createFileRoute("/_authenticated/datasets")({
 });
 
 function DatasetsPage() {
-  const { role } = useAuth();
+  const { role, hospital } = useAuth();
+  const canManage = hospital?.status === "approved";
   const qc = useQueryClient();
   const listFn = useServerFn(listDatasets);
   const importFn = useServerFn(importDemoDataset);

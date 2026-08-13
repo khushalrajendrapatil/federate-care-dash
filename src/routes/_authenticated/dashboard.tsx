@@ -7,6 +7,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { PageHeader } from "@/components/AppShell";
 import { StatCard } from "@/components/StatCard";
 import { AccuracyChart } from "@/components/AccuracyChart";
+import { PipelineFlow } from "@/components/PipelineFlow";
 import { ApiErrorNotice } from "@/components/ApiErrorNotice";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
