@@ -65,28 +65,18 @@ function AuthPage() {
     const { data, error } = await supabase.auth.signUp({
       email,
       password: String(form.get("password")),
-      options: { emailRedirectTo: `${window.location.origin}/dashboard` },
+      options: {
+        emailRedirectTo: `${window.location.origin}/dashboard`,
+        data: { hospital_name: name, hospital_location: location },
+      },
     });
 
+    setBusy(false);
     if (error) {
-      setBusy(false);
       toast.error(error.message);
       return;
     }
 
-    const userId = data.user?.id;
-    if (userId) {
-      const { error: hospErr } = await supabase
-        .from("hospitals")
-        .insert({ owner_id: userId, name, email, location, status: "pending" });
-      if (hospErr) {
-        setBusy(false);
-        toast.error(`Account created, but hospital record failed: ${hospErr.message}`);
-        return;
-      }
-    }
-
-    setBusy(false);
     toast.success("Registration submitted — an administrator must approve your hospital.");
     if (data.session) void navigate({ to: "/dashboard" });
   };
