@@ -33,6 +33,7 @@ function AuthPage() {
   const navigate = useNavigate();
   const { session, loading } = useAuth();
   const [busy, setBusy] = useState(false);
+  const [email, setEmail] = useState("");
 
   useEffect(() => {
     if (!loading && session) void navigate({ to: "/dashboard" });
@@ -53,6 +54,24 @@ function AuthPage() {
     }
     void navigate({ to: "/dashboard" });
   };
+
+  const forgotPassword = async () => {
+    if (!email.trim()) {
+      toast.error("Enter your account email first.");
+      return;
+    }
+    setBusy(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+    setBusy(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success("Reset link sent — check your inbox.");
+  };
+
 
   const register = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
