@@ -10,6 +10,7 @@ import {
   LogOut,
   Settings,
   Stethoscope,
+  UserCog,
   Users,
 } from "lucide-react";
 import type { ReactNode } from "react";
@@ -25,6 +26,7 @@ const NAV = [
   { to: "/history", label: "History", icon: History, roles: ["admin", "hospital"] },
   { to: "/training", label: "Train Model", icon: Cpu, roles: ["admin"] },
   { to: "/hospitals", label: "Hospitals", icon: Building2, roles: ["admin"] },
+  { to: "/accounts", label: "Accounts", icon: UserCog, roles: ["admin"] },
   { to: "/audit", label: "Audit Trail", icon: Blocks, roles: ["admin", "hospital"] },
   { to: "/settings", label: "Settings", icon: Settings, roles: ["admin", "hospital"] },
 ] as const;
