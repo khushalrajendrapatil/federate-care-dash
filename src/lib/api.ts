@@ -1,6 +1,6 @@
 /**
  * Thin HTTP client for the external Python federated-learning API.
- * Base URL is configurable via VITE_ML_API_BASE_URL, with a runtime
+ * Base URL is configurable via VITE_FL_API_URL, with a runtime
  * override stored in localStorage so it can be swapped without a rebuild.
  */
 
@@ -11,7 +11,8 @@ export function getApiBaseUrl(): string {
     const override = window.localStorage.getItem(STORAGE_KEY);
     if (override) return override.replace(/\/+$/, "");
   }
-  const env = import.meta.env["VITE_ML_API_BASE_URL"] as string | undefined;
+  const env = (import.meta.env["VITE_FL_API_URL"] ??
+    import.meta.env["VITE_ML_API_BASE_URL"]) as string | undefined;
   return (env ?? "").replace(/\/+$/, "");
 }
 

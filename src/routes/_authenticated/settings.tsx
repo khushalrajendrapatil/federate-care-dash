@@ -67,7 +67,7 @@ function SettingsPage() {
             <CardTitle className="text-base">Federated learning service</CardTitle>
             <CardDescription>
               Base URL of the Python API that performs training, predictions, SHAP explanations and
-              the ledger. Defaults to the VITE_ML_API_BASE_URL environment variable; the value below
+              the ledger. Defaults to the VITE_FL_API_URL environment variable; the value below
               overrides it in this browser.
             </CardDescription>
           </CardHeader>
