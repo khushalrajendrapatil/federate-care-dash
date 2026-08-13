@@ -125,7 +125,7 @@ function DatasetsPage() {
         </AlertDescription>
       </Alert>
 
-      {role === "hospital" ? (
+      {canManage ? (
         <Card className="mb-6 shadow-[var(--shadow-card)]">
           <CardHeader>
             <CardTitle className="text-base">Add training data</CardTitle>
@@ -192,7 +192,7 @@ function DatasetsPage() {
                   <TableHead>Train / test</TableHead>
                   <TableHead>Positives</TableHead>
                   <TableHead>Added</TableHead>
-                  {role === "hospital" ? <TableHead /> : null}
+                  {canManage ? <TableHead /> : null}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -209,7 +209,7 @@ function DatasetsPage() {
                     <TableCell className="text-muted-foreground">
                       {new Date(d.createdAt).toLocaleDateString()}
                     </TableCell>
-                    {role === "hospital" ? (
+                    {canManage ? (
                       <TableCell className="text-right">
                         <Button
                           variant="ghost"
