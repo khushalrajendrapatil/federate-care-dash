@@ -136,17 +136,16 @@ function DashboardPage() {
 
   const samplesByHospital = new Map<string, number>();
   for (const d of datasets.data ?? []) {
-    if (!d.hospitalName) continue;
     samplesByHospital.set(
-      d.hospitalName,
-      (samplesByHospital.get(d.hospitalName) ?? 0) + d.sampleCount,
+      d.hospitalId,
+      (samplesByHospital.get(d.hospitalId) ?? 0) + d.sampleCount,
     );
   }
   const hospitalNodes: HospitalNode[] = data.hospitals.map((h) => ({
     id: h.id,
     name: h.name,
     status: h.status,
-    samples: samplesByHospital.get(h.name) ?? 0,
+    samples: samplesByHospital.get(h.id) ?? 0,
   }));
 
   const myLocal = (() => {

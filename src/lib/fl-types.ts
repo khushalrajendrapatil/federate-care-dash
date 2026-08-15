@@ -93,5 +93,6 @@ export type DatasetDto = {
   testCount: number;
   positives: number;
   createdAt: string;
+  hospitalId: string;
   hospitalName: string | null;
 };

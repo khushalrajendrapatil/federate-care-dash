@@ -356,6 +356,7 @@ export async function listDatasets(scope: { hospitalId?: string }): Promise<Data
       testCount: rows.filter((r) => r.split === "test").length,
       positives: rows.filter((r) => r.label === 1).length,
       createdAt: d.created_at,
+      hospitalId: d.hospital_id,
       hospitalName: (d as { hospitals?: { name?: string } }).hospitals?.name ?? null,
     });
   }
