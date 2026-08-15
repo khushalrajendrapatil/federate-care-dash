@@ -23,7 +23,6 @@ import { Route as AuthenticatedPatientsRouteImport } from './routes/_authenticat
 import { Route as AuthenticatedPredictRouteImport } from './routes/_authenticated/predict'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedTrainingRouteImport } from './routes/_authenticated/training'
-import { Route as AuthenticatedWorkflowRouteImport } from './routes/_authenticated/workflow'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -94,11 +93,6 @@ const AuthenticatedTrainingRoute = AuthenticatedTrainingRouteImport.update({
   path: '/training',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const AuthenticatedWorkflowRoute = AuthenticatedWorkflowRouteImport.update({
-  id: '/workflow',
-  path: '/workflow',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -114,7 +108,6 @@ export interface FileRoutesByFullPath {
   '/predict': typeof AuthenticatedPredictRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/training': typeof AuthenticatedTrainingRoute
-  '/workflow': typeof AuthenticatedWorkflowRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -130,7 +123,6 @@ export interface FileRoutesByTo {
   '/predict': typeof AuthenticatedPredictRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/training': typeof AuthenticatedTrainingRoute
-  '/workflow': typeof AuthenticatedWorkflowRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -148,7 +140,6 @@ export interface FileRoutesById {
   '/_authenticated/predict': typeof AuthenticatedPredictRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
   '/_authenticated/training': typeof AuthenticatedTrainingRoute
-  '/_authenticated/workflow': typeof AuthenticatedWorkflowRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -166,7 +157,6 @@ export interface FileRouteTypes {
     | '/predict'
     | '/settings'
     | '/training'
-    | '/workflow'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -182,7 +172,6 @@ export interface FileRouteTypes {
     | '/predict'
     | '/settings'
     | '/training'
-    | '/workflow'
   id:
     | '__root__'
     | '/'
@@ -199,7 +188,6 @@ export interface FileRouteTypes {
     | '/_authenticated/predict'
     | '/_authenticated/settings'
     | '/_authenticated/training'
-    | '/_authenticated/workflow'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -309,13 +297,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedTrainingRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/workflow': {
-      id: '/_authenticated/workflow'
-      path: '/workflow'
-      fullPath: '/workflow'
-      preLoaderRoute: typeof AuthenticatedWorkflowRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
   }
 }
 
@@ -330,7 +311,6 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedPredictRoute: typeof AuthenticatedPredictRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
   AuthenticatedTrainingRoute: typeof AuthenticatedTrainingRoute
-  AuthenticatedWorkflowRoute: typeof AuthenticatedWorkflowRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
@@ -344,7 +324,6 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedPredictRoute: AuthenticatedPredictRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
   AuthenticatedTrainingRoute: AuthenticatedTrainingRoute,
-  AuthenticatedWorkflowRoute: AuthenticatedWorkflowRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =

@@ -8,11 +8,18 @@ import { PageHeader } from "@/components/AppShell";
 import { StatCard } from "@/components/StatCard";
 import { AccuracyChart } from "@/components/AccuracyChart";
 import { PipelineFlow } from "@/components/PipelineFlow";
+import { FederatedArchitecture, type HospitalNode } from "@/components/FederatedArchitecture";
 import { ApiErrorNotice } from "@/components/ApiErrorNotice";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { getSystemStatus } from "@/lib/fl.functions";
+import { getSystemStatus, listDatasets } from "@/lib/fl.functions";
 import type { RoundDto } from "@/lib/fl-types";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
@@ -55,10 +62,17 @@ function DashboardPage() {
   const { role, hospital } = useAuth();
   const isAdmin = role === "admin";
   const statusFn = useServerFn(getSystemStatus);
+  const datasetsFn = useServerFn(listDatasets);
 
   const status = useQuery({
     queryKey: ["system-status"],
     queryFn: () => statusFn(),
+    retry: false,
+  });
+
+  const datasets = useQuery({
+    queryKey: ["datasets"],
+    queryFn: () => datasetsFn(),
     retry: false,
   });
 
@@ -120,6 +134,21 @@ function DashboardPage() {
   const metrics = (data.model?.metrics ?? {}) as Record<string, number>;
   const accuracy = metrics["accuracy"] != null ? `${Number(metrics["accuracy"]).toFixed(2)}%` : "—";
 
+  const samplesByHospital = new Map<string, number>();
+  for (const d of datasets.data ?? []) {
+    if (!d.hospitalName) continue;
+    samplesByHospital.set(
+      d.hospitalName,
+      (samplesByHospital.get(d.hospitalName) ?? 0) + d.sampleCount,
+    );
+  }
+  const hospitalNodes: HospitalNode[] = data.hospitals.map((h) => ({
+    id: h.id,
+    name: h.name,
+    status: h.status,
+    samples: samplesByHospital.get(h.name) ?? 0,
+  }));
+
   const myLocal = (() => {
     if (isAdmin || !hospital) return null;
     for (let i = history.length - 1; i >= 0; i--) {
@@ -143,6 +172,30 @@ function DashboardPage() {
       />
 
       <PipelineFlow status={status.data} patientCount={data.patientCount} />
+
+      <Card className="mb-6 shadow-[var(--shadow-card)]">
+        <CardHeader>
+          <CardTitle className="text-base">
+            Federated learning workflow — healthcare data privacy &amp; secure disease prediction
+          </CardTitle>
+          <CardDescription>
+            Raw patient records never leave a hospital. Each site preprocesses its own data and
+            trains a local model; only clipped, noise-added model updates are aggregated with FedAvg
+            into a global model and redistributed for further rounds. Every step is appended to a
+            hash-linked audit ledger, and predictions ship with SHAP explanations. Demo data only —
+            do not enter real patient information.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <FederatedArchitecture
+            status={status.data}
+            hospitals={hospitalNodes}
+            metrics={metrics}
+            patientCount={data.patientCount}
+            predictionCount={data.predictionCount}
+          />
+        </CardContent>
+      </Card>
 
       <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {isAdmin ? (
