@@ -134,6 +134,21 @@ function DashboardPage() {
   const metrics = (data.model?.metrics ?? {}) as Record<string, number>;
   const accuracy = metrics["accuracy"] != null ? `${Number(metrics["accuracy"]).toFixed(2)}%` : "—";
 
+  const samplesByHospital = new Map<string, number>();
+  for (const d of datasets.data ?? []) {
+    if (!d.hospitalName) continue;
+    samplesByHospital.set(
+      d.hospitalName,
+      (samplesByHospital.get(d.hospitalName) ?? 0) + d.sampleCount,
+    );
+  }
+  const hospitalNodes: HospitalNode[] = data.hospitals.map((h) => ({
+    id: h.id,
+    name: h.name,
+    status: h.status,
+    samples: samplesByHospital.get(h.name) ?? 0,
+  }));
+
   const myLocal = (() => {
     if (isAdmin || !hospital) return null;
     for (let i = history.length - 1; i >= 0; i--) {
