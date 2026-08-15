@@ -62,10 +62,17 @@ function DashboardPage() {
   const { role, hospital } = useAuth();
   const isAdmin = role === "admin";
   const statusFn = useServerFn(getSystemStatus);
+  const datasetsFn = useServerFn(listDatasets);
 
   const status = useQuery({
     queryKey: ["system-status"],
     queryFn: () => statusFn(),
+    retry: false,
+  });
+
+  const datasets = useQuery({
+    queryKey: ["datasets"],
+    queryFn: () => datasetsFn(),
     retry: false,
   });
 
