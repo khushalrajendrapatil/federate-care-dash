@@ -95,7 +95,9 @@ export function FederatedArchitecture({
         <Down />
         <Box
           title="Multiple healthcare hospitals"
-          lines={[`${patientCount} private patient record${patientCount === 1 ? "" : "s"}`]}
+          lines={[
+            `${patientCount} private patient record${patientCount === 1 ? "" : "s"} visible to you`,
+          ]}
           done={hospitals.length > 0}
         />
       </Section>
@@ -110,7 +112,7 @@ export function FederatedArchitecture({
           <div key={h.id} className="space-y-1">
             <Box
               title={h.name}
-              lines={[`Private patient data`, `${h.samples} local samples`, h.status]}
+              lines={[`Private patient data`, `${h.samples} local dataset samples`, h.status]}
               done={h.samples > 0}
             />
             <Down />
@@ -162,7 +164,9 @@ export function FederatedArchitecture({
         <Down />
         <Box
           title="Federated aggregation (FedAvg)"
-          lines={[`Sample-weighted averaging · ${fed?.totalTrainingSamples ?? 0} samples`]}
+          lines={[
+            `Sample-weighted averaging · ${fed?.totalTrainingSamples ?? 0} local samples across ${fed?.hospitalsWithData ?? 0} site${fed?.hospitalsWithData === 1 ? "" : "s"}`,
+          ]}
           done={(fed?.totalTrainingSamples ?? 0) > 0}
         />
         <Down />
@@ -186,7 +190,7 @@ export function FederatedArchitecture({
             `Accuracy ${pct("accuracy")}`,
             `Precision ${pct("precision")}`,
             `Recall ${pct("recall")}`,
-            `F1 ${pct("f1")}${metrics["auc"] != null ? ` · AUC ${Number(metrics["auc"]).toFixed(2)}` : ""}`,
+            `F1 ${pct("f1")}${metrics["auc"] != null ? ` · AUC ${pct("auc")}` : ""}`,
           ]}
           done={trained}
         />
