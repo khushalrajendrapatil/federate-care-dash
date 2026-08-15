@@ -8,11 +8,18 @@ import { PageHeader } from "@/components/AppShell";
 import { StatCard } from "@/components/StatCard";
 import { AccuracyChart } from "@/components/AccuracyChart";
 import { PipelineFlow } from "@/components/PipelineFlow";
+import { FederatedArchitecture, type HospitalNode } from "@/components/FederatedArchitecture";
 import { ApiErrorNotice } from "@/components/ApiErrorNotice";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { getSystemStatus } from "@/lib/fl.functions";
+import { getSystemStatus, listDatasets } from "@/lib/fl.functions";
 import type { RoundDto } from "@/lib/fl-types";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
