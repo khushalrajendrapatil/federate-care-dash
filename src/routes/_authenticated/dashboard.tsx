@@ -158,6 +158,30 @@ function DashboardPage() {
 
       <PipelineFlow status={status.data} patientCount={data.patientCount} />
 
+      <Card className="mb-6 shadow-[var(--shadow-card)]">
+        <CardHeader>
+          <CardTitle className="text-base">
+            Federated learning workflow — healthcare data privacy &amp; secure disease prediction
+          </CardTitle>
+          <CardDescription>
+            Raw patient records never leave a hospital. Each site preprocesses its own data and
+            trains a local model; only clipped, noise-added model updates are aggregated with FedAvg
+            into a global model and redistributed for further rounds. Every step is appended to a
+            hash-linked audit ledger, and predictions ship with SHAP explanations. Demo data only —
+            do not enter real patient information.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <FederatedArchitecture
+            status={status.data}
+            hospitals={hospitalNodes}
+            metrics={metrics}
+            patientCount={data.patientCount}
+            predictionCount={data.predictionCount}
+          />
+        </CardContent>
+      </Card>
+
       <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {isAdmin ? (
           <>
