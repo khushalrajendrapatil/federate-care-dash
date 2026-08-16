@@ -1,13 +1,16 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { CheckCircle2, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Loader2, PlugZap, XCircle } from "lucide-react";
 import { PageHeader } from "@/components/AppShell";
 import { ApiErrorNotice } from "@/components/ApiErrorNotice";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/hooks/useAuth";
-import { getSystemStatus } from "@/lib/fl.functions";
+import { getSystemStatus, runConnectivityTest } from "@/lib/fl.functions";
+
 
 export const Route = createFileRoute("/_authenticated/settings")({
   head: () => ({
