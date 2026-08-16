@@ -20,6 +20,13 @@ export const getSystemStatus = createServerFn({ method: "GET" })
     return systemStatus(context.supabase);
   });
 
+export const runConnectivityTest = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { runConnectivityReport } = await import("@/lib/connectivity.server");
+    return runConnectivityReport(context.supabase, context.userId, context.claims?.email);
+  });
+
 export const getFeatureSchema = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<{ trained: boolean; version: string | null; featureNames: string[] }> => {
