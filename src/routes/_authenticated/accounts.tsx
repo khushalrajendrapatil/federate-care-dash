@@ -57,17 +57,17 @@ function AccountsPage() {
   const [target, setTarget] = useState<ManagedUser | null>(null);
   const [password, setPassword] = useState("");
 
-  const accountError = error instanceof Error && error.message.includes("SUPABASE_SERVICE_ROLE_KEY")
-    ? "Account administration is unavailable in this local copy because it requires a server-only administrator credential. All other MedFed pages work with the normal publishable key."
-    : error instanceof Error
-      ? error.message
-      : "Could not load accounts.";
-
   const { data, isLoading, error } = useQuery({
     queryKey: ["managed-users"],
     queryFn: () => load(),
     enabled: role === "admin",
   });
+
+  const accountError = error instanceof Error && error.message.includes("SUPABASE_SERVICE_ROLE_KEY")
+    ? "Account administration is unavailable in this local copy because it requires a server-only administrator credential. All other MedFed pages work with the normal publishable key."
+    : error instanceof Error
+      ? error.message
+      : "Could not load accounts.";
 
   const resetMutation = useMutation({
     mutationFn: (input: { userId: string; password: string }) => reset({ data: input }),
