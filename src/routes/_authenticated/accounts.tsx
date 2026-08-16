@@ -57,6 +57,12 @@ function AccountsPage() {
   const [target, setTarget] = useState<ManagedUser | null>(null);
   const [password, setPassword] = useState("");
 
+  const accountError = error instanceof Error && error.message.includes("SUPABASE_SERVICE_ROLE_KEY")
+    ? "Account administration is unavailable in this local copy because it requires a server-only administrator credential. All other MedFed pages work with the normal publishable key."
+    : error instanceof Error
+      ? error.message
+      : "Could not load accounts.";
+
   const { data, isLoading, error } = useQuery({
     queryKey: ["managed-users"],
     queryFn: () => load(),
@@ -111,7 +117,7 @@ function AccountsPage() {
           {isLoading ? (
             <p className="py-8 text-center text-sm text-muted-foreground">Loading accounts…</p>
           ) : error ? (
-            <p className="py-8 text-center text-sm text-destructive">{(error as Error).message}</p>
+            <p className="py-8 text-center text-sm text-destructive">{accountError}</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
