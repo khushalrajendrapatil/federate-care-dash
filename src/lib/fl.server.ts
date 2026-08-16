@@ -4,7 +4,6 @@
  * ledger lives here. Never import this from a component or a route module.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import type { Database } from "@/integrations/supabase/types";
 import { FEATURE_NAMES, N_FEATURES, SHARD_COUNT } from "@/lib/ml/feature-names";
 import {
@@ -31,6 +30,7 @@ import type {
 } from "@/lib/fl-types";
 
 type Json = Record<string, unknown>;
+type DbClient = SupabaseClient<Database>;
 
 export type Actor = {
   userId: string;
@@ -78,6 +78,7 @@ export function requireAdmin(actor: Actor) {
 /* ------------------------------------------------------------------ audit */
 
 export async function recordAudit(entry: {
+  client: DbClient;
   eventType: string;
   actorId?: string | null;
   actorLabel?: string | null;
@@ -86,16 +87,17 @@ export async function recordAudit(entry: {
   roundNumber?: number | null;
   payload?: Json;
 }): Promise<string | null> {
-  const { data, error } = await supabaseAdmin
+  const { client, ...auditEntry } = entry;
+  const { data, error } = await client
     .from("audit_events")
     .insert({
-      event_type: entry.eventType,
-      actor_id: entry.actorId ?? null,
-      actor_label: entry.actorLabel ?? null,
-      hospital_id: entry.hospitalId ?? null,
-      model_version: entry.modelVersion ?? null,
-      round_number: entry.roundNumber ?? null,
-      payload: (entry.payload ?? {}) as never,
+      event_type: auditEntry.eventType,
+      actor_id: auditEntry.actorId ?? null,
+      actor_label: auditEntry.actorLabel ?? null,
+      hospital_id: auditEntry.hospitalId ?? null,
+      model_version: auditEntry.modelVersion ?? null,
+      round_number: auditEntry.roundNumber ?? null,
+      payload: (auditEntry.payload ?? {}) as never,
       // Overwritten by the database chaining trigger.
       previous_hash: "",
       hash: "",
@@ -110,8 +112,8 @@ export async function recordAudit(entry: {
   return data?.hash ?? null;
 }
 
-export async function notify(userId: string, title: string, body: string, level = "info") {
-  const { error } = await supabaseAdmin
+export async function notify(client: DbClient, userId: string, title: string, body: string, level = "info") {
+  const { error } = await client
     .from("notifications")
     .insert({ user_id: userId, title, body, level });
   if (error) console.error("[notify] failed", error);
@@ -124,8 +126,8 @@ function shardFor(index: number) {
   return index % SHARD_COUNT;
 }
 
-export async function importPublicShard(hospitalId: string, actorId: string, actorLabel: string) {
-  const { data: existing, error: exErr } = await supabaseAdmin
+export async function importPublicShard(client: DbClient, hospitalId: string, actorId: string, actorLabel: string) {
+  const { data: existing, error: exErr } = await client
     .from("datasets")
     .select("id")
     .eq("hospital_id", hospitalId);
@@ -134,7 +136,7 @@ export async function importPublicShard(hospitalId: string, actorId: string, act
     throw new Error("This hospital already holds a dataset. Remove it before importing again.");
   }
 
-  const { count: datasetCount } = await supabaseAdmin
+  const { count: datasetCount } = await client
     .from("datasets")
     .select("id", { count: "exact", head: true });
 
@@ -163,7 +165,7 @@ export async function importPublicShard(hospitalId: string, actorId: string, act
     };
   });
 
-  const { data: ds, error: dsErr } = await supabaseAdmin
+  const { data: ds, error: dsErr } = await client
     .from("datasets")
     .insert({
       hospital_id: hospitalId,
@@ -176,15 +178,16 @@ export async function importPublicShard(hospitalId: string, actorId: string, act
     .single();
   if (dsErr || !ds) throw new Error(`Could not create the dataset: ${dsErr?.message}`);
 
-  const { error: sampleErr } = await supabaseAdmin.from("dataset_samples").insert(
+  const { error: sampleErr } = await client.from("dataset_samples").insert(
     rows.map((r) => ({ ...r, dataset_id: ds.id, hospital_id: hospitalId })),
   );
   if (sampleErr) {
-    await supabaseAdmin.from("datasets").delete().eq("id", ds.id);
+    await client.from("datasets").delete().eq("id", ds.id);
     throw new Error(`Could not store the samples: ${sampleErr.message}`);
   }
 
   await recordAudit({
+    client,
     eventType: "dataset.imported",
     actorId,
     actorLabel,
@@ -249,6 +252,7 @@ export function parseCsv(csv: string): { features: number[]; label: number }[] {
 }
 
 export async function importCsv(
+  client: DbClient,
   hospitalId: string,
   actorId: string,
   actorLabel: string,
@@ -256,7 +260,7 @@ export async function importCsv(
   csv: string,
 ) {
   const rows = parseCsv(csv);
-  const { data: existing } = await supabaseAdmin
+  const { data: existing } = await client
     .from("datasets")
     .select("id")
     .eq("hospital_id", hospitalId);
@@ -265,7 +269,7 @@ export async function importCsv(
   }
 
   const testCut = Math.max(1, Math.floor(rows.length * 0.2));
-  const { data: ds, error: dsErr } = await supabaseAdmin
+  const { data: ds, error: dsErr } = await client
     .from("datasets")
     .insert({
       hospital_id: hospitalId,
@@ -278,7 +282,7 @@ export async function importCsv(
     .single();
   if (dsErr || !ds) throw new Error(`Could not create the dataset: ${dsErr?.message}`);
 
-  const { error: sampleErr } = await supabaseAdmin.from("dataset_samples").insert(
+  const { error: sampleErr } = await client.from("dataset_samples").insert(
     rows.map((r, i) => ({
       dataset_id: ds.id,
       hospital_id: hospitalId,
@@ -288,11 +292,12 @@ export async function importCsv(
     })),
   );
   if (sampleErr) {
-    await supabaseAdmin.from("datasets").delete().eq("id", ds.id);
+    await client.from("datasets").delete().eq("id", ds.id);
     throw new Error(`Could not store the samples: ${sampleErr.message}`);
   }
 
   await recordAudit({
+    client,
     eventType: "dataset.imported",
     actorId,
     actorLabel,
@@ -304,12 +309,13 @@ export async function importCsv(
 }
 
 export async function removeDataset(
+  client: DbClient,
   datasetId: string,
   hospitalId: string,
   actorId: string,
   actorLabel: string,
 ) {
-  const { data: ds } = await supabaseAdmin
+  const { data: ds } = await client
     .from("datasets")
     .select("id,hospital_id")
     .eq("id", datasetId)
@@ -317,10 +323,11 @@ export async function removeDataset(
   if (!ds) throw new Error("Dataset not found.");
   if (ds.hospital_id !== hospitalId) throw new Error("You can only remove your own dataset.");
 
-  const { error } = await supabaseAdmin.from("datasets").delete().eq("id", datasetId);
+  const { error } = await client.from("datasets").delete().eq("id", datasetId);
   if (error) throw new Error(`Could not remove the dataset: ${error.message}`);
 
   await recordAudit({
+    client,
     eventType: "dataset.removed",
     actorId,
     actorLabel,
@@ -330,8 +337,8 @@ export async function removeDataset(
   return { ok: true };
 }
 
-export async function listDatasets(scope: { hospitalId?: string }): Promise<DatasetDto[]> {
-  let query = supabaseAdmin
+export async function listDatasets(client: DbClient, scope: { hospitalId?: string }): Promise<DatasetDto[]> {
+  let query = client
     .from("datasets")
     .select("id,name,source,sample_count,created_at,hospital_id,hospitals(name)")
     .order("created_at", { ascending: false });
@@ -342,7 +349,7 @@ export async function listDatasets(scope: { hospitalId?: string }): Promise<Data
 
   const result: DatasetDto[] = [];
   for (const d of data ?? []) {
-    const { data: samples } = await supabaseAdmin
+    const { data: samples } = await client
       .from("dataset_samples")
       .select("label,split")
       .eq("dataset_id", d.id);
@@ -365,8 +372,8 @@ export async function listDatasets(scope: { hospitalId?: string }): Promise<Data
 
 /* ------------------------------------------------------------- training */
 
-async function loadPartitions(): Promise<ClientPartition[]> {
-  const { data: hospitals, error } = await supabaseAdmin
+async function loadPartitions(client: DbClient): Promise<ClientPartition[]> {
+  const { data: hospitals, error } = await client
     .from("hospitals")
     .select("id,name")
     .eq("status", "approved");
@@ -374,7 +381,7 @@ async function loadPartitions(): Promise<ClientPartition[]> {
 
   const partitions: ClientPartition[] = [];
   for (const h of hospitals ?? []) {
-    const { data: samples, error: sErr } = await supabaseAdmin
+    const { data: samples, error: sErr } = await client
       .from("dataset_samples")
       .select("features,label,split")
       .eq("hospital_id", h.id);
@@ -394,11 +401,12 @@ async function loadPartitions(): Promise<ClientPartition[]> {
 }
 
 export async function trainGlobal(
+  client: DbClient,
   actorId: string,
   actorLabel: string,
   options: { rounds: number; localEpochs: number; noiseMultiplier: number },
 ): Promise<TrainingResultDto> {
-  const partitions = await loadPartitions();
+  const partitions = await loadPartitions(client);
   if (partitions.length === 0) {
     throw new Error(
       "No approved hospital holds a dataset yet. Import a dataset from the Datasets page before training.",
@@ -414,6 +422,7 @@ export async function trainGlobal(
 
   const runId = crypto.randomUUID();
   await recordAudit({
+    client,
     eventType: "training.started",
     actorId,
     actorLabel,
@@ -431,7 +440,7 @@ export async function trainGlobal(
   const result = await runFederated(partitions, N_FEATURES, cfg, runId);
   const version = `v${new Date().toISOString().replace(/[-:T]/g, "").slice(0, 14)}`;
 
-  const { data: model, error: modelErr } = await supabaseAdmin
+  const { data: model, error: modelErr } = await client
     .from("global_models")
     .insert({
       version,
@@ -460,11 +469,11 @@ export async function trainGlobal(
     .single();
   if (modelErr || !model) throw new Error(`Could not save the trained model: ${modelErr?.message}`);
 
-  await supabaseAdmin.from("global_models").update({ is_active: false }).neq("id", model.id);
+  await client.from("global_models").update({ is_active: false }).neq("id", model.id);
 
   for (let i = 0; i < result.rounds.length; i++) {
     const r = result.rounds[i]!;
-    const { data: roundRow, error: roundErr } = await supabaseAdmin
+    const { data: roundRow, error: roundErr } = await client
       .from("training_rounds")
       .insert({
         model_id: model.id,
@@ -481,7 +490,7 @@ export async function trainGlobal(
 
     const locals = result.localsByRound[i] ?? [];
     if (locals.length) {
-      await supabaseAdmin.from("local_updates").insert(
+      await client.from("local_updates").insert(
         locals.map((l) => ({
           round_id: roundRow.id,
           hospital_id: l.hospitalId,
@@ -495,6 +504,7 @@ export async function trainGlobal(
     }
 
     await recordAudit({
+      client,
       eventType: "training.round",
       actorId,
       actorLabel,
@@ -515,6 +525,7 @@ export async function trainGlobal(
 
   const ledgerHash =
     (await recordAudit({
+      client,
       eventType: "model.version_created",
       actorId,
       actorLabel,
@@ -530,12 +541,13 @@ export async function trainGlobal(
       },
     })) ?? "";
 
-  const { data: owners } = await supabaseAdmin
+  const { data: owners } = await client
     .from("hospitals")
     .select("owner_id")
     .eq("status", "approved");
   for (const o of owners ?? []) {
     await notify(
+      client,
       o.owner_id,
       `Global model ${version} published`,
       `A federated run over ${partitions.length} hospital(s) finished with ${result.finalMetrics.accuracy.toFixed(2)}% accuracy.`,
@@ -562,8 +574,8 @@ export async function trainGlobal(
 
 /* ------------------------------------------------------------ prediction */
 
-async function activeModel() {
-  const { data, error } = await supabaseAdmin
+async function activeModel(client: DbClient) {
+  const { data, error } = await client
     .from("global_models")
     .select("*")
     .eq("is_active", true)
@@ -574,8 +586,8 @@ async function activeModel() {
   return data;
 }
 
-export async function getFeatureSchema() {
-  const model = await activeModel();
+export async function getFeatureSchema(client: DbClient) {
+  const model = await activeModel(client);
   return {
     trained: Boolean(model),
     version: model?.version ?? null,
@@ -584,13 +596,14 @@ export async function getFeatureSchema() {
 }
 
 export async function predict(
+  client: DbClient,
   actorId: string,
   actorLabel: string,
   hospitalId: string | null,
   patientId: string | null,
   features: number[],
 ): Promise<PredictionResult> {
-  const model = await activeModel();
+  const model = await activeModel(client);
   if (!model) {
     throw new Error(
       "No global model has been trained yet. An administrator must run a federated training round first.",
@@ -627,7 +640,7 @@ export async function predict(
   const shap = linearShap(features, model.weights, model.feature_means, model.feature_stds, names);
   const explanationAvailable = shap.some((s) => Math.abs(s.impact) > 1e-9);
 
-  const { data: row, error } = await supabaseAdmin
+  const { data: row, error } = await client
     .from("predictions")
     .insert({
       hospital_id: hospitalId,
@@ -650,6 +663,7 @@ export async function predict(
   if (error || !row) throw new Error(`Prediction succeeded but could not be stored: ${error?.message}`);
 
   await recordAudit({
+    client,
     eventType: "prediction.created",
     actorId,
     actorLabel,
@@ -682,12 +696,12 @@ export async function predict(
 
 /* ---------------------------------------------------------------- ledger */
 
-export async function readLedger(limit = 200): Promise<LedgerDto> {
-  const { data: verification, error: vErr } = await supabaseAdmin.rpc("verify_audit_chain");
+export async function readLedger(client: DbClient, limit = 200): Promise<LedgerDto> {
+  const { data: verification, error: vErr } = await client.rpc("verify_audit_chain");
   if (vErr) throw new Error(`Could not verify the ledger: ${vErr.message}`);
   const v = Array.isArray(verification) ? verification[0] : verification;
 
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await client
     .from("audit_events")
     .select("*")
     .order("seq", { ascending: false })
@@ -714,13 +728,13 @@ export async function readLedger(limit = 200): Promise<LedgerDto> {
 
 /* ---------------------------------------------------------------- status */
 
-export async function systemStatus(): Promise<SystemStatusDto> {
+export async function systemStatus(client: DbClient): Promise<SystemStatusDto> {
   let dbOk = true;
   let dbMessage = "Connected";
   let hospitalsTotal = 0;
   let hospitalsApproved = 0;
 
-  const { count: total, error: hErr } = await supabaseAdmin
+  const { count: total, error: hErr } = await client
     .from("hospitals")
     .select("id", { count: "exact", head: true });
   if (hErr) {
@@ -728,29 +742,29 @@ export async function systemStatus(): Promise<SystemStatusDto> {
     dbMessage = hErr.message;
   } else {
     hospitalsTotal = total ?? 0;
-    const { count: approved } = await supabaseAdmin
+    const { count: approved } = await client
       .from("hospitals")
       .select("id", { count: "exact", head: true })
       .eq("status", "approved");
     hospitalsApproved = approved ?? 0;
   }
 
-  const model = await activeModel();
+  const model = await activeModel(client);
 
-  const { data: datasetRows } = await supabaseAdmin
+  const { data: datasetRows } = await client
     .from("datasets")
     .select("hospital_id,sample_count");
   const hospitalsWithData = new Set((datasetRows ?? []).map((d) => d.hospital_id)).size;
   const totalTrainingSamples = (datasetRows ?? []).reduce((a, d) => a + d.sample_count, 0);
 
-  const { data: lastRound } = await supabaseAdmin
+  const { data: lastRound } = await client
     .from("training_rounds")
     .select("created_at")
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
 
-  const { data: verification } = await supabaseAdmin.rpc("verify_audit_chain");
+  const { data: verification } = await client.rpc("verify_audit_chain");
   const v = Array.isArray(verification) ? verification[0] : verification;
 
   const metrics = (model?.metrics ?? {}) as { accuracy?: number };
@@ -789,10 +803,10 @@ export async function systemStatus(): Promise<SystemStatusDto> {
 }
 
 /** Re-evaluate the active model on the held-out data - used by the status page. */
-export async function evaluateActiveModel() {
-  const model = await activeModel();
+export async function evaluateActiveModel(client: DbClient) {
+  const model = await activeModel(client);
   if (!model) return null;
-  const partitions = await loadPartitions();
+  const partitions = await loadPartitions(client);
   const stats = {
     means: model.feature_means,
     stds: model.feature_stds,

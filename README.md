@@ -47,3 +47,22 @@ Lovable app (TanStack Start + React)
   only. Never enter real patient information.
 - The model is L2-regularised logistic regression, chosen because it trains deterministically in
   the serverless runtime and yields exact SHAP values. Deep models would need a GPU host.
+
+## Run a downloaded copy locally
+
+1. Install Bun, then run `bun install` in the project folder.
+2. Copy `.env.example` to `.env`.
+3. Fill in the project URL, project ID, and **publishable** key. Use the same values for both the
+   `VITE_SUPABASE_*` and `SUPABASE_*` entries shown in the template.
+4. Apply every SQL file in `supabase/migrations/` to the backend used by the downloaded copy.
+5. Start the app with `bun run dev` and open the URL printed in the terminal.
+
+The Dashboard, Patients, Datasets, Prediction, History, Audit Trail, Settings, and federated
+training flow use the signed-in account and row-level database permissions. They do **not** need a
+server administrator key.
+
+The Admin **Accounts** page is the only exception because listing all authentication accounts,
+setting another user's password, and deactivating an account are privileged authentication
+operations. That page requires `SUPABASE_SERVICE_ROLE_KEY` on the local server. Never add that key
+to a `VITE_*` variable or expose it to the browser. If the key is unavailable, use the hosted app
+for account administration; the rest of the downloaded application continues to work locally.
