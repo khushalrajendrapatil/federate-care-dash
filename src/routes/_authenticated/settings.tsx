@@ -94,7 +94,7 @@ function ConnectivityCard() {
                   {check.status === "pass" ? (
                     <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-risk-low" />
                   ) : check.status === "warn" ? (
-                    <AlertTriangle className="mt-0.5 size-4 shrink-0 text-risk-medium" />
+                    <AlertTriangle className="mt-0.5 size-4 shrink-0 text-risk-moderate" />
                   ) : (
                     <XCircle className="mt-0.5 size-4 shrink-0 text-risk-high" />
                   )}
