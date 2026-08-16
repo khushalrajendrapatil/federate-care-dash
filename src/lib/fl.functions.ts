@@ -15,23 +15,23 @@ import type {
 
 export const getSystemStatus = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .handler(async (): Promise<SystemStatusDto> => {
+  .handler(async ({ context }): Promise<SystemStatusDto> => {
     const { systemStatus } = await import("@/lib/fl.server");
-    return systemStatus();
+    return systemStatus(context.supabase);
   });
 
 export const getFeatureSchema = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .handler(async (): Promise<{ trained: boolean; version: string | null; featureNames: string[] }> => {
+  .handler(async ({ context }): Promise<{ trained: boolean; version: string | null; featureNames: string[] }> => {
     const { getFeatureSchema: schema } = await import("@/lib/fl.server");
-    return schema();
+    return schema(context.supabase);
   });
 
 export const getLedger = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .handler(async (): Promise<LedgerDto> => {
+  .handler(async ({ context }): Promise<LedgerDto> => {
     const { readLedger } = await import("@/lib/fl.server");
-    return readLedger(300);
+    return readLedger(context.supabase, 300);
   });
 
 export const listDatasets = createServerFn({ method: "GET" })
@@ -39,7 +39,7 @@ export const listDatasets = createServerFn({ method: "GET" })
   .handler(async ({ context }): Promise<DatasetDto[]> => {
     const { resolveActor, listDatasets: list } = await import("@/lib/fl.server");
     const actor = await resolveActor(context.supabase, context.userId, context.claims?.email);
-    return list(actor.isAdmin ? {} : { hospitalId: actor.hospital?.id ?? "none" });
+    return list(context.supabase, actor.isAdmin ? {} : { hospitalId: actor.hospital?.id ?? "none" });
   });
 
 export const importDemoDataset = createServerFn({ method: "POST" })
@@ -50,7 +50,7 @@ export const importDemoDataset = createServerFn({ method: "POST" })
     );
     const actor = await resolveActor(context.supabase, context.userId, context.claims?.email);
     const hospital = requireApprovedHospital(actor);
-    return importPublicShard(hospital.id, actor.userId, actor.label);
+    return importPublicShard(context.supabase, hospital.id, actor.userId, actor.label);
   });
 
 export const uploadDataset = createServerFn({ method: "POST" })
@@ -66,7 +66,7 @@ export const uploadDataset = createServerFn({ method: "POST" })
     const { resolveActor, requireApprovedHospital, importCsv } = await import("@/lib/fl.server");
     const actor = await resolveActor(context.supabase, context.userId, context.claims?.email);
     const hospital = requireApprovedHospital(actor);
-    return importCsv(hospital.id, actor.userId, actor.label, data.fileName, data.csv);
+    return importCsv(context.supabase, hospital.id, actor.userId, actor.label, data.fileName, data.csv);
   });
 
 export const deleteDataset = createServerFn({ method: "POST" })
@@ -79,7 +79,7 @@ export const deleteDataset = createServerFn({ method: "POST" })
     const { resolveActor, requireApprovedHospital, removeDataset } = await import("@/lib/fl.server");
     const actor = await resolveActor(context.supabase, context.userId, context.claims?.email);
     const hospital = requireApprovedHospital(actor);
-    return removeDataset(data.datasetId, hospital.id, actor.userId, actor.label);
+    return removeDataset(context.supabase, data.datasetId, hospital.id, actor.userId, actor.label);
   });
 
 export const trainGlobalModel = createServerFn({ method: "POST" })
@@ -103,7 +103,7 @@ export const trainGlobalModel = createServerFn({ method: "POST" })
     const { resolveActor, requireAdmin, trainGlobal } = await import("@/lib/fl.server");
     const actor = await resolveActor(context.supabase, context.userId, context.claims?.email);
     requireAdmin(actor);
-    return trainGlobal(actor.userId, actor.label, data);
+    return trainGlobal(context.supabase, actor.userId, actor.label, data);
   });
 
 export const runPrediction = createServerFn({ method: "POST" })
@@ -123,6 +123,7 @@ export const runPrediction = createServerFn({ method: "POST" })
       throw new Error("Your hospital is awaiting administrator approval.");
     }
     return predict(
+      context.supabase,
       actor.userId,
       actor.label,
       actor.hospital?.id ?? null,
@@ -142,6 +143,7 @@ export const logAuditEvent = createServerFn({ method: "POST" })
     const { resolveActor, recordAudit } = await import("@/lib/fl.server");
     const actor = await resolveActor(context.supabase, context.userId, context.claims?.email);
     await recordAudit({
+      client: context.supabase,
       eventType: data.eventType,
       actorId: actor.userId,
       actorLabel: actor.label,
@@ -174,6 +176,7 @@ export const setHospitalStatus = createServerFn({ method: "POST" })
     if (error) throw new Error(`Could not update the hospital: ${error.message}`);
 
     await recordAudit({
+      client: context.supabase,
       eventType: `hospital.${data.status}`,
       actorId: actor.userId,
       actorLabel: actor.label,
@@ -181,6 +184,7 @@ export const setHospitalStatus = createServerFn({ method: "POST" })
       payload: { hospital: updated.name },
     });
     await notify(
+      context.supabase,
       updated.owner_id,
       `Registration ${data.status}`,
       `${updated.name} has been ${data.status} by an administrator.`,

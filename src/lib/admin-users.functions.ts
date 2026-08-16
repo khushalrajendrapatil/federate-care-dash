@@ -81,12 +81,14 @@ export const resetUserPassword = createServerFn({ method: "POST" })
     if (error) throw new Error(`Could not reset the password: ${error.message}`);
 
     await recordAudit({
+      client: context.supabase,
       eventType: "account.password_reset",
       actorId: actor.userId,
       actorLabel: actor.label,
       payload: { target: updated.user?.email ?? data.userId },
     });
     await notify(
+      context.supabase,
       data.userId,
       "Password changed",
       "An administrator set a new password for your account.",
@@ -115,6 +117,7 @@ export const setUserActive = createServerFn({ method: "POST" })
     if (error) throw new Error(`Could not update the account: ${error.message}`);
 
     await recordAudit({
+      client: context.supabase,
       eventType: data.active ? "account.reactivated" : "account.deactivated",
       actorId: actor.userId,
       actorLabel: actor.label,
