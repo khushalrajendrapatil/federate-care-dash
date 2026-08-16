@@ -1,13 +1,16 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { CheckCircle2, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Loader2, PlugZap, XCircle } from "lucide-react";
 import { PageHeader } from "@/components/AppShell";
 import { ApiErrorNotice } from "@/components/ApiErrorNotice";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/hooks/useAuth";
-import { getSystemStatus } from "@/lib/fl.functions";
+import { getSystemStatus, runConnectivityTest } from "@/lib/fl.functions";
+
 
 export const Route = createFileRoute("/_authenticated/settings")({
   head: () => ({
@@ -43,6 +46,79 @@ function StatusRow({ label, value, ok }: { label: string; value: string; ok?: bo
   );
 }
 
+function ConnectivityCard() {
+  const testFn = useServerFn(runConnectivityTest);
+  const test = useMutation({ mutationFn: () => testFn() });
+  const report = test.data;
+
+  return (
+    <Card className="shadow-[var(--shadow-card)]">
+      <CardHeader className="flex flex-row items-start justify-between gap-4">
+        <div>
+          <CardTitle className="text-base">API connectivity test</CardTitle>
+          <CardDescription>
+            Run a one-click health check that confirms the API base URL, your session permissions
+            and model readiness before you use predictions.
+          </CardDescription>
+        </div>
+        <Button onClick={() => test.mutate()} disabled={test.isPending}>
+          {test.isPending ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <PlugZap className="size-4" />
+          )}
+          {test.isPending ? "Testing…" : "Run test"}
+        </Button>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {test.error ? <ApiErrorNotice error={test.error} title="Connectivity test failed" /> : null}
+
+        {report ? (
+          <>
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <Badge variant={report.ok ? "default" : "destructive"}>
+                {report.ok ? "All checks passed" : "Problems found"}
+              </Badge>
+              <Badge variant={report.predictionsReady ? "default" : "secondary"}>
+                {report.predictionsReady ? "Predictions ready" : "Predictions unavailable"}
+              </Badge>
+              <span className="text-muted-foreground">
+                Base URL: <span className="font-medium text-foreground">{report.baseUrl}</span> ·{" "}
+                {report.totalMs} ms · {new Date(report.checkedAt).toLocaleTimeString()}
+              </span>
+            </div>
+
+            <ul className="divide-y divide-border">
+              {report.checks.map((check) => (
+                <li key={check.id} className="flex items-start gap-3 py-2">
+                  {check.status === "pass" ? (
+                    <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-risk-low" />
+                  ) : check.status === "warn" ? (
+                    <AlertTriangle className="mt-0.5 size-4 shrink-0 text-risk-moderate" />
+                  ) : (
+                    <XCircle className="mt-0.5 size-4 shrink-0 text-risk-high" />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium">{check.label}</p>
+                    <p className="text-sm text-muted-foreground">{check.detail}</p>
+                  </div>
+                  <span className="text-xs text-muted-foreground">{check.durationMs} ms</span>
+                </li>
+              ))}
+            </ul>
+          </>
+        ) : test.isPending ? (
+          <Skeleton className="h-24" />
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            No test has been run yet in this session.
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function SettingsPage() {
   const { role, hospital, user } = useAuth();
   const statusFn = useServerFn(getSystemStatus);
@@ -58,6 +134,12 @@ function SettingsPage() {
         title="Settings & system status"
         description="Everything runs inside this application — there is no external service to configure."
       />
+
+      <div className="mb-6">
+        <ConnectivityCard />
+      </div>
+
+
 
       {isLoading ? (
         <div className="grid gap-6 lg:grid-cols-2">
